@@ -1,0 +1,130 @@
+"use client";
+
+import { motion } from "framer-motion";
+import { Save, Brain, Bell, MessageSquare } from "lucide-react";
+
+const steps = [
+  {
+    number: "01",
+    icon: Save,
+    title: "Kaydet",
+    description:
+      "Sesli not, link, fatura veya fotoğraf — sadece WhatsApp'a gönder. Başka bir şey gerekmez.",
+  },
+  {
+    number: "02",
+    icon: Brain,
+    title: "Anla",
+    description:
+      "Yapay zeka içeriği analiz eder, özetler ve anlamsal vektörlerle depolar.",
+  },
+  {
+    number: "03",
+    icon: Bell,
+    title: "Hatırla",
+    description:
+      "\"O notu ne demişti?\" diye sor — semantik arama ile anında bul.",
+  },
+  {
+    number: "04",
+    icon: MessageSquare,
+    title: "Cevapla",
+    description:
+      "Bağlamsal sorular sor, içeriklerini birbiriyle ilişkilendir, asistanın seni hatırlasın.",
+  },
+];
+
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.14 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 40 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.55, ease: "easeOut" } },
+};
+
+export default function ProcessSection() {
+  return (
+    <section id="process" className="py-28 relative overflow-hidden">
+      {/* Top divider */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#00FF9D]/20 to-transparent" />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-20"
+        >
+          <span className="text-xs font-mono text-[#00FF9D] uppercase tracking-[0.2em] mb-4 block">
+            Nasıl Çalışır?
+          </span>
+          <h2 className="font-heading text-4xl sm:text-5xl font-bold">
+            4 Adımda{" "}
+            <span className="text-[#00FF9D]">Çalışma Mantığı</span>
+          </h2>
+        </motion.div>
+
+        {/* Steps */}
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-60px" }}
+          className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 relative"
+        >
+          {/* Connector line (desktop only) */}
+          <div className="absolute top-[2.6rem] left-[15%] right-[15%] h-px hidden lg:block overflow-hidden">
+            <motion.div
+              initial={{ scaleX: 0 }}
+              whileInView={{ scaleX: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 1, delay: 0.4, ease: "easeInOut" }}
+              style={{ transformOrigin: "left" }}
+              className="h-full bg-gradient-to-r from-[#00FF9D]/30 via-[#00FF9D]/15 to-[#00FF9D]/30"
+            />
+          </div>
+
+          {steps.map((step, index) => (
+            <motion.div
+              key={step.number}
+              variants={itemVariants}
+              className="group relative"
+            >
+              <div className="h-full bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl p-6 transition-all duration-300 hover:border-[#00FF9D]/20 hover:bg-[#0F0F0F]">
+                {/* Icon + Number row */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="relative w-11 h-11 rounded-xl bg-[#00FF9D]/8 border border-[#00FF9D]/20 flex items-center justify-center group-hover:bg-[#00FF9D]/14 transition-colors flex-shrink-0">
+                    <step.icon className="w-5 h-5 text-[#00FF9D]" />
+                  </div>
+                  <span className="font-mono text-xs text-[#00FF9D]/40 font-bold tracking-widest">
+                    {step.number}
+                  </span>
+                </div>
+
+                <h3 className="font-heading text-xl font-bold text-white mb-2">
+                  {step.title}
+                </h3>
+                <p className="text-sm text-white/45 leading-relaxed">
+                  {step.description}
+                </p>
+
+                {/* Arrow for non-last steps */}
+                {index < steps.length - 1 && (
+                  <div className="absolute -right-2.5 top-[2.6rem] z-10 hidden lg:flex items-center justify-center">
+                    <div className="w-5 h-5 rounded-full bg-black border border-[#00FF9D]/20 flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#00FF9D]/40" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
+    </section>
+  );
+}
