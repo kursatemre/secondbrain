@@ -12,10 +12,10 @@ const WAITLIST_MAX = 500;
 // 2. Editörde  ⋮ → "Önceden doldurulmuş bağlantı al" → dummy değer gir → "Bağlantıyı al"
 // 3. URL'deki FORM_ID ve entry.XXXXX değerlerini aşağıya yapıştır
 const GF = {
-  ACTION_URL:  "https://docs.google.com/forms/d/e/BURAYA_FORM_ID/formResponse",
-  FIELD_NAME:  "entry.XXXXXXXXX", // Ad Soyad
-  FIELD_PHONE: "entry.XXXXXXXXX", // WhatsApp Numarası
-  FIELD_EMAIL: "entry.XXXXXXXXX", // E-posta (opsiyonel)
+  ACTION_URL:  "https://docs.google.com/forms/d/e/1FAIpQLScpugExmAds20_w2M1c8T-HTL82YOKkofuEfJ1Sz5HDCzPfLQ/formResponse",
+  FIELD_NAME:  "entry.252005174", // Ad Soyad
+  FIELD_PHONE: "entry.410165350", // WhatsApp Numarası
+  FIELD_EMAIL: "entry.132157625", // E-posta (opsiyonel)
 } as const;
 // ─────────────────────────────────────────────────────────────────────────────
 
