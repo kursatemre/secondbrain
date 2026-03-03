@@ -1,6 +1,5 @@
-import { kv } from "@vercel/kv";
+import IoRedis from "ioredis";
 
-// Başlangıç değeri — KV boşsa bu sayıdan başlarız
 const INITIAL_COUNT = 247;
 
 const GF_ACTION_URL =
@@ -11,17 +10,33 @@ const GF = {
   FIELD_EMAIL: "entry.132157625",
 } as const;
 
+// Serverless warm invocations arasında bağlantıyı yeniden kullan
+let redis: IoRedis | null = null;
+function getRedis() {
+  if (!redis) {
+    redis = new IoRedis(process.env.REDIS_URL!, {
+      maxRetriesPerRequest: 2,
+      enableOfflineQueue: false,
+    });
+  }
+  return redis;
+}
+
 // GET /api/waitlist → mevcut katılımcı sayısını döner
 export async function GET() {
-  const joins = (await kv.get<number>("waitlist:joins")) ?? 0;
-  return Response.json({ count: INITIAL_COUNT + joins });
+  try {
+    const joins = await getRedis().get("waitlist:joins");
+    const count = INITIAL_COUNT + (joins ? parseInt(joins) : 0);
+    return Response.json({ count });
+  } catch {
+    return Response.json({ count: INITIAL_COUNT });
+  }
 }
 
 // POST /api/waitlist → Google Forms'a gönderir + sayacı artırır
 export async function POST(request: Request) {
   const { name, phone, email } = await request.json();
 
-  // Sunucu tarafında CORS kısıtı yok — düz POST yeterli
   const body = new URLSearchParams();
   body.append(GF.FIELD_NAME, name);
   body.append(GF.FIELD_PHONE, `+90 ${phone}`);
@@ -34,11 +49,12 @@ export async function POST(request: Request) {
       body,
       redirect: "follow",
     });
-  } catch {
-    // Google Forms iletim hatası — yine de sayacı artır
-  }
+  } catch {}
 
-  // Atomik artış (race-condition güvenli)
-  const joins = await kv.incr("waitlist:joins");
-  return Response.json({ count: INITIAL_COUNT + joins });
+  try {
+    const joins = await getRedis().incr("waitlist:joins");
+    return Response.json({ count: INITIAL_COUNT + joins });
+  } catch {
+    return Response.json({ count: INITIAL_COUNT + 1 });
+  }
 }
