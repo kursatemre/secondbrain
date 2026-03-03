@@ -7,6 +7,18 @@ import { CheckCircle2, Loader2, ArrowRight, Users } from "lucide-react";
 const WAITLIST_JOINED = 247;
 const WAITLIST_MAX = 500;
 
+// ─── Google Forms Yapılandırması ──────────────────────────────────────────────
+// 1. forms.google.com → yeni form oluştur: Ad Soyad, WhatsApp Numarası, E-posta
+// 2. Editörde  ⋮ → "Önceden doldurulmuş bağlantı al" → dummy değer gir → "Bağlantıyı al"
+// 3. URL'deki FORM_ID ve entry.XXXXX değerlerini aşağıya yapıştır
+const GF = {
+  ACTION_URL:  "https://docs.google.com/forms/d/e/BURAYA_FORM_ID/formResponse",
+  FIELD_NAME:  "entry.XXXXXXXXX", // Ad Soyad
+  FIELD_PHONE: "entry.XXXXXXXXX", // WhatsApp Numarası
+  FIELD_EMAIL: "entry.XXXXXXXXX", // E-posta (opsiyonel)
+} as const;
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function WaitlistSection() {
   const [form, setForm] = useState({ name: "", phone: "", email: "" });
   const [submitted, setSubmitted] = useState(false);
@@ -29,7 +41,19 @@ export default function WaitlistSection() {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1400));
+
+    const body = new FormData();
+    body.append(GF.FIELD_NAME, form.name.trim());
+    body.append(GF.FIELD_PHONE, `+90 ${form.phone.trim()}`);
+    if (form.email.trim()) body.append(GF.FIELD_EMAIL, form.email.trim());
+
+    try {
+      // no-cors: CORS hatası fırlatır ama veri Google Forms'a iletilir
+      await fetch(GF.ACTION_URL, { method: "POST", mode: "no-cors", body });
+    } catch {
+      // no-cors modunda catch her zaman çalışır — ignore
+    }
+
     setLoading(false);
     setSubmitted(true);
   };
