@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, ArrowRight, Users } from "lucide-react";
 
-const WAITLIST_JOINED = 247;
+const WAITLIST_INITIAL = 247;
 const WAITLIST_MAX = 500;
 
 // ─── Google Forms Yapılandırması ──────────────────────────────────────────────
@@ -24,6 +24,7 @@ export default function WaitlistSection() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [joined, setJoined] = useState(WAITLIST_INITIAL);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError("");
@@ -55,10 +56,11 @@ export default function WaitlistSection() {
     }
 
     setLoading(false);
+    setJoined((prev) => prev + 1);
     setSubmitted(true);
   };
 
-  const progress = (WAITLIST_JOINED / WAITLIST_MAX) * 100;
+  const progress = (joined / WAITLIST_MAX) * 100;
 
   return (
     <section
@@ -102,18 +104,17 @@ export default function WaitlistSection() {
             <div className="flex items-center justify-between text-xs mb-2">
               <div className="flex items-center gap-1.5 text-white/40">
                 <Users className="w-3.5 h-3.5" />
-                <span>{WAITLIST_JOINED} kişi katıldı</span>
+                <span>{joined} kişi katıldı</span>
               </div>
               <span className="font-mono font-bold" style={{ color: "#00ff9d" }}>
-                {WAITLIST_MAX - WAITLIST_JOINED} yer kaldı
+                {WAITLIST_MAX - joined} yer kaldı
               </span>
             </div>
             <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
               <motion.div
-                initial={{ width: 0 }}
-                whileInView={{ width: `${progress}%` }}
-                viewport={{ once: true }}
-                transition={{ duration: 1.2, ease: "easeOut", delay: 0.3 }}
+                animate={{ width: `${progress}%` }}
+                initial={{ width: `${(WAITLIST_INITIAL / WAITLIST_MAX) * 100}%` }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
                 className="h-full rounded-full"
                 style={{
                   background: "linear-gradient(90deg, #00ff9d, #00d4ff)",
@@ -306,7 +307,7 @@ export default function WaitlistSection() {
               </h3>
               <p className="text-white/45 text-sm leading-relaxed mb-6">
                 <span style={{ color: "#00ff9d" }}>
-                  #{WAITLIST_JOINED + 1}
+                  #{joined}
                 </span>{" "}
                 numaralı öncelik sırana girdin. Beta açılınca WhatsApp üzerinden
                 davetiye alacaksın.
