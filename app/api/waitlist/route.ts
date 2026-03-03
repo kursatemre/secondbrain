@@ -1,9 +1,8 @@
-import { Redis } from "@upstash/redis";
+import Redis from "ioredis";
 
 export const dynamic = "force-dynamic";
 
 const INITIAL_COUNT = 247;
-const REDIS_TIMEOUT_MS = 4000;
 
 const GF_ACTION_URL =
   "https://docs.google.com/forms/d/e/1FAIpQLScpugExmAds20_w2M1c8T-HTL82YOKkofuEfJ1Sz5HDCzPfLQ/formResponse";
@@ -13,44 +12,32 @@ const GF = {
   FIELD_EMAIL: "entry.132157625",
 } as const;
 
-function getRedis(): Redis {
-  // Vercel KV direkt REST env var'larını kullan (öncelikli)
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    return new Redis({
-      url: process.env.KV_REST_API_URL,
-      token: process.env.KV_REST_API_TOKEN,
-    });
-  }
-  // Fallback: REDIS_URL'den türet — redis://default:TOKEN@HOST.upstash.io:PORT
-  const url = new URL(process.env.REDIS_URL!);
-  return new Redis({
-    url: `https://${url.hostname}`,
-    token: decodeURIComponent(url.password),
+// Serverless için: her çağrıda fresh bağlantı aç, işlem bitince kapat
+function createRedis() {
+  return new Redis(process.env.REDIS_URL!, {
+    connectTimeout: 5000,
+    commandTimeout: 4000,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    retryStrategy: () => null, // bağlanamıyorsa hemen hata ver, tekrar deneme
   });
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("Redis timeout")), ms)
-    ),
-  ]);
-}
-
+// GET /api/waitlist → mevcut katılımcı sayısını döner
 export async function GET() {
+  const redis = createRedis();
   try {
-    const joins = await withTimeout(
-      getRedis().get<number>("waitlist:joins"),
-      REDIS_TIMEOUT_MS
-    );
-    return Response.json({ count: INITIAL_COUNT + (joins ?? 0) });
+    const joins = await redis.get("waitlist:joins");
+    return Response.json({ count: INITIAL_COUNT + (Number(joins) || 0) });
   } catch (e) {
     console.error("[waitlist GET]", e);
     return Response.json({ count: INITIAL_COUNT });
+  } finally {
+    redis.disconnect();
   }
 }
 
+// POST /api/waitlist → Google Forms'a gönderir (fire & forget) + sayacı artırır
 export async function POST(request: Request) {
   const { name, phone, email } = await request.json();
 
@@ -66,14 +53,14 @@ export async function POST(request: Request) {
     redirect: "manual",
   }).catch(() => {});
 
+  const redis = createRedis();
   try {
-    const joins = await withTimeout(
-      getRedis().incr("waitlist:joins"),
-      REDIS_TIMEOUT_MS
-    );
+    const joins = await redis.incr("waitlist:joins");
     return Response.json({ count: INITIAL_COUNT + joins });
   } catch (e) {
     console.error("[waitlist POST]", e);
     return Response.json({ count: INITIAL_COUNT + 1 });
+  } finally {
+    redis.disconnect();
   }
 }
