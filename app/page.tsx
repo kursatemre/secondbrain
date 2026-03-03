@@ -2,6 +2,7 @@ import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import ProcessSection from "@/components/ProcessSection";
 import FeaturesSection from "@/components/FeaturesSection";
+import TrustSection from "@/components/TrustSection";
 import WaitlistSection from "@/components/WaitlistSection";
 import Footer from "@/components/Footer";
 
@@ -12,6 +13,7 @@ export default function Home() {
       <HeroSection />
       <ProcessSection />
       <FeaturesSection />
+      <TrustSection />
       <WaitlistSection />
       <Footer />
     </main>
