@@ -145,8 +145,17 @@ export default function FeaturesSection() {
           >
             <div className="absolute bottom-0 left-0 w-36 h-36 bg-[#00FF9D]/3 rounded-full blur-2xl pointer-events-none" />
 
-            <div className="w-11 h-11 rounded-xl bg-[#00FF9D]/8 border border-[#00FF9D]/20 flex items-center justify-center mb-4">
-              <Camera className="w-5 h-5 text-[#00FF9D]" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-11 h-11 rounded-xl bg-[#00FF9D]/8 border border-[#00FF9D]/20 flex items-center justify-center">
+                <Camera className="w-5 h-5 text-[#00FF9D]" />
+              </div>
+              <motion.span
+                animate={{ opacity: [0.6, 1, 0.6] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="px-2.5 py-0.5 bg-white/5 border border-white/10 rounded-full text-[10px] text-white/40 font-mono tracking-wider"
+              >
+                YAKINDA
+              </motion.span>
             </div>
 
             <h3 className="font-heading text-xl font-bold text-white mb-2">

@@ -57,7 +57,7 @@ export default function Navbar() {
             {[
               { href: "#process", label: "Nasıl Çalışır" },
               { href: "#features", label: "Özellikler" },
-              { href: "#pricing", label: "Fiyatlar" },
+              { href: "#waitlist", label: "Bekleme Listesi" },
             ].map((link) => (
               <a
                 key={link.href}
@@ -72,13 +72,10 @@ export default function Navbar() {
           {/* CTA */}
           <div className="hidden md:block">
             <a
-              href={WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#waitlist"
               className="flex items-center gap-2 px-4 py-2 bg-[#00FF9D] text-black text-sm font-bold rounded-xl hover:bg-[#00FF9D]/90 transition-all hover:shadow-[0_0_20px_rgba(0,255,157,0.35)]"
             >
-              <WhatsAppIcon />
-              Hemen Dene
+              Beta&apos;ya Katıl
             </a>
           </div>
 
@@ -111,7 +108,7 @@ export default function Navbar() {
               {[
                 { href: "#process", label: "Nasıl Çalışır" },
                 { href: "#features", label: "Özellikler" },
-                { href: "#pricing", label: "Fiyatlar" },
+                { href: "#waitlist", label: "Bekleme Listesi" },
               ].map((link) => (
                 <a
                   key={link.href}
@@ -123,13 +120,11 @@ export default function Navbar() {
                 </a>
               ))}
               <a
-                href={WHATSAPP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+                href="#waitlist"
+                onClick={() => setMenuOpen(false)}
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-[#00FF9D] text-black text-sm font-bold rounded-xl mt-2"
               >
-                <WhatsAppIcon />
-                WhatsApp&apos;ta Hemen Dene
+                Beta&apos;ya Katıl — Ücretsiz
               </a>
             </div>
           </motion.div>

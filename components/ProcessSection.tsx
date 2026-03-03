@@ -108,9 +108,16 @@ export default function ProcessSection() {
                 <h3 className="font-heading text-xl font-bold text-white mb-2">
                   {step.title}
                 </h3>
-                <p className="text-sm text-white/45 leading-relaxed">
+                <p className="text-sm text-white/45 leading-relaxed mb-4">
                   {step.description}
                 </p>
+
+                {/* Beta badge */}
+                <div className="pt-3 border-t border-white/5">
+                  <span className="text-[10px] font-mono text-[#00FF9D]/55 px-2 py-0.5 border border-[#00FF9D]/15 rounded-full">
+                    Beta&apos;da Deneyimle
+                  </span>
+                </div>
 
                 {/* Arrow for non-last steps */}
                 {index < steps.length - 1 && (
