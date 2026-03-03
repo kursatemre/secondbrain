@@ -1,36 +1,36 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Save, Brain, Bell, MessageSquare } from "lucide-react";
+import { Save, Brain, Search, MessageSquare } from "lucide-react";
 
 const steps = [
   {
     number: "01",
     icon: Save,
-    title: "Kaydet",
+    title: "Gönder",
     description:
-      "Sesli not, link, fatura veya fotoğraf — sadece WhatsApp'a gönder. Başka bir şey gerekmez.",
+      "WhatsApp'ta Second Brain'e link, sesli not, fatura veya fotoğraf at. Başka hiçbir uygulama açmana gerek yok.",
   },
   {
     number: "02",
     icon: Brain,
-    title: "Anla",
+    title: "AI Analiz Eder",
     description:
-      "Yapay zeka içeriği analiz eder, özetler ve anlamsal vektörlerle depolar.",
+      "Second Brain içeriği okur, özetler ve otomatik etiketler. Sen sadece gönderirsin, gerisini AI halleder.",
   },
   {
     number: "03",
-    icon: Bell,
-    title: "Hatırla",
+    icon: Search,
+    title: "Sor & Bul",
     description:
-      "\"O notu ne demişti?\" diye sor — semantik arama ile anında bul.",
+      "\"Geçen ay kaydettiğim finans linkini bul\" veya \"Dünkü faturada ne yazıyordu?\" diye sor — saniyeler içinde cevap gelir.",
   },
   {
     number: "04",
     icon: MessageSquare,
-    title: "Cevapla",
+    title: "Bağlantı Kurar",
     description:
-      "Bağlamsal sorular sor, içeriklerini birbiriyle ilişkilendir, asistanın seni hatırlasın.",
+      "Farklı zamanlarda kaydettiğin notları birbirine bağlar. \"Bunu daha önce konuşmuştuk\" der, karar verirken seni destekler.",
   },
 ];
 
