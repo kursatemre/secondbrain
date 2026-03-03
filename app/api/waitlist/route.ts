@@ -1,4 +1,4 @@
-import Redis from "ioredis";
+import { Redis } from "@upstash/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -12,28 +12,22 @@ const GF = {
   FIELD_EMAIL: "entry.132157625",
 } as const;
 
-// Serverless için: her çağrıda fresh bağlantı aç, işlem bitince kapat
-function createRedis() {
-  return new Redis(process.env.REDIS_URL!, {
-    connectTimeout: 5000,
-    commandTimeout: 4000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    retryStrategy: () => null, // bağlanamıyorsa hemen hata ver, tekrar deneme
+// Vercel KV (Upstash) — HTTP REST, serverless'ta TCP gibi kopmaz
+function getRedis(): Redis {
+  return new Redis({
+    url: process.env.KV_REST_API_URL!,
+    token: process.env.KV_REST_API_TOKEN!,
   });
 }
 
 // GET /api/waitlist → mevcut katılımcı sayısını döner
 export async function GET() {
-  const redis = createRedis();
   try {
-    const joins = await redis.get("waitlist:joins");
-    return Response.json({ count: INITIAL_COUNT + (Number(joins) || 0) });
+    const joins = await getRedis().get<number>("waitlist:joins");
+    return Response.json({ count: INITIAL_COUNT + (joins ?? 0) });
   } catch (e) {
     console.error("[waitlist GET]", e);
     return Response.json({ count: INITIAL_COUNT });
-  } finally {
-    redis.disconnect();
   }
 }
 
@@ -53,14 +47,11 @@ export async function POST(request: Request) {
     redirect: "manual",
   }).catch(() => {});
 
-  const redis = createRedis();
   try {
-    const joins = await redis.incr("waitlist:joins");
+    const joins = await getRedis().incr("waitlist:joins");
     return Response.json({ count: INITIAL_COUNT + joins });
   } catch (e) {
     console.error("[waitlist POST]", e);
     return Response.json({ count: INITIAL_COUNT + 1 });
-  } finally {
-    redis.disconnect();
   }
 }
