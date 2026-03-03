@@ -129,7 +129,7 @@ export default function Navbar() {
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-[#00FF9D] text-black text-sm font-bold rounded-xl mt-2"
               >
                 <WhatsAppIcon />
-                WhatsApp'ta Hemen Dene
+                WhatsApp&apos;ta Hemen Dene
               </a>
             </div>
           </motion.div>

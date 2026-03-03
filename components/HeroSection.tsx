@@ -45,7 +45,7 @@ export default function HeroSection() {
             <motion.div variants={fadeUp} className="mb-6">
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#00FF9D]/20 bg-[#00FF9D]/5 text-xs text-[#00FF9D] font-medium">
                 <Sparkles className="w-3.5 h-3.5" />
-                Türkiye'nin AI Hafıza Asistanı
+                Türkiye&apos;nin AI Hafıza Asistanı
               </span>
             </motion.div>
 
