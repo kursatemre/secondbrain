@@ -16,7 +16,7 @@ export default function WaitlistSection() {
 
   // Sayfa açılınca sunucudan gerçek sayıyı çek
   useEffect(() => {
-    fetch("/api/waitlist")
+    fetch("/api/waitlist", { cache: "no-store" })
       .then((r) => r.json())
       .then(({ count }) => setJoined(count))
       .catch(() => {});

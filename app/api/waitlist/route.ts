@@ -1,5 +1,7 @@
 import { Redis } from "@upstash/redis";
 
+export const dynamic = "force-dynamic";
+
 const INITIAL_COUNT = 247;
 
 const GF_ACTION_URL =
@@ -30,7 +32,7 @@ export async function GET() {
   }
 }
 
-// POST /api/waitlist → Google Forms'a gönderir + sayacı artırır
+// POST /api/waitlist → Google Forms'a gönderir (fire & forget) + sayacı artırır
 export async function POST(request: Request) {
   const { name, phone, email } = await request.json();
 
@@ -39,14 +41,13 @@ export async function POST(request: Request) {
   body.append(GF.FIELD_PHONE, `+90 ${phone}`);
   if (email) body.append(GF.FIELD_EMAIL, email);
 
-  try {
-    await fetch(GF_ACTION_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-      redirect: "follow",
-    });
-  } catch {}
+  // Google Forms'u beklemeden gönder — yavaş cevabı kullanıcıyı beklettirmesin
+  fetch(GF_ACTION_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    redirect: "follow",
+  }).catch(() => {});
 
   try {
     const joins = await getRedis().incr("waitlist:joins");
