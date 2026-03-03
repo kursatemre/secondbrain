@@ -3,6 +3,7 @@ import HeroSection from "@/components/HeroSection";
 import ProcessSection from "@/components/ProcessSection";
 import FeaturesSection from "@/components/FeaturesSection";
 import TrustSection from "@/components/TrustSection";
+import FAQSection from "@/components/FAQSection";
 import WaitlistSection from "@/components/WaitlistSection";
 import Footer from "@/components/Footer";
 
@@ -14,6 +15,7 @@ export default function Home() {
       <ProcessSection />
       <FeaturesSection />
       <TrustSection />
+      <FAQSection />
       <WaitlistSection />
       <Footer />
     </main>
