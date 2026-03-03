@@ -1,4 +1,4 @@
-import IoRedis from "ioredis";
+import { Redis } from "@upstash/redis";
 
 const INITIAL_COUNT = 247;
 
@@ -10,24 +10,21 @@ const GF = {
   FIELD_EMAIL: "entry.132157625",
 } as const;
 
-// Serverless warm invocations arasında bağlantıyı yeniden kullan
-let redis: IoRedis | null = null;
-function getRedis() {
-  if (!redis) {
-    redis = new IoRedis(process.env.REDIS_URL!, {
-      maxRetriesPerRequest: 2,
-      enableOfflineQueue: false,
-    });
-  }
-  return redis;
+// REDIS_URL: redis://default:TOKEN@HOSTNAME.upstash.io:PORT
+// @upstash/redis HTTP REST API — serverless'ta TCP kopmaz
+function getRedis(): Redis {
+  const url = new URL(process.env.REDIS_URL!);
+  return new Redis({
+    url: `https://${url.hostname}`,
+    token: decodeURIComponent(url.password),
+  });
 }
 
 // GET /api/waitlist → mevcut katılımcı sayısını döner
 export async function GET() {
   try {
-    const joins = await getRedis().get("waitlist:joins");
-    const count = INITIAL_COUNT + (joins ? parseInt(joins) : 0);
-    return Response.json({ count });
+    const joins = await getRedis().get<number>("waitlist:joins");
+    return Response.json({ count: INITIAL_COUNT + (joins ?? 0) });
   } catch {
     return Response.json({ count: INITIAL_COUNT });
   }

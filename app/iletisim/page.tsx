@@ -155,17 +155,10 @@ function ContactCard({
       href={href}
       target={href.startsWith("http") ? "_blank" : undefined}
       rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
-      className="group flex items-start gap-4 p-5 rounded-2xl transition-all duration-200"
+      className="group flex items-start gap-4 p-5 rounded-2xl transition-all duration-200 hover:border-white/12"
       style={{
         background: "rgba(13,13,13,1)",
         border: "1px solid rgba(255,255,255,0.06)",
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = `${color}30`;
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor =
-          "rgba(255,255,255,0.06)";
       }}
     >
       <div
