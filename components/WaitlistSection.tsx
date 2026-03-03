@@ -1,23 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Loader2, ArrowRight, Users } from "lucide-react";
 
 const WAITLIST_INITIAL = 247;
 const WAITLIST_MAX = 500;
-
-// ─── Google Forms Yapılandırması ──────────────────────────────────────────────
-// 1. forms.google.com → yeni form oluştur: Ad Soyad, WhatsApp Numarası, E-posta
-// 2. Editörde  ⋮ → "Önceden doldurulmuş bağlantı al" → dummy değer gir → "Bağlantıyı al"
-// 3. URL'deki FORM_ID ve entry.XXXXX değerlerini aşağıya yapıştır
-const GF = {
-  ACTION_URL:  "https://docs.google.com/forms/d/e/1FAIpQLScpugExmAds20_w2M1c8T-HTL82YOKkofuEfJ1Sz5HDCzPfLQ/formResponse",
-  FIELD_NAME:  "entry.252005174", // Ad Soyad
-  FIELD_PHONE: "entry.410165350", // WhatsApp Numarası
-  FIELD_EMAIL: "entry.132157625", // E-posta (opsiyonel)
-} as const;
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default function WaitlistSection() {
   const [form, setForm] = useState({ name: "", phone: "", email: "" });
@@ -25,6 +13,14 @@ export default function WaitlistSection() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [joined, setJoined] = useState(WAITLIST_INITIAL);
+
+  // Sayfa açılınca sunucudan gerçek sayıyı çek
+  useEffect(() => {
+    fetch("/api/waitlist")
+      .then((r) => r.json())
+      .then(({ count }) => setJoined(count))
+      .catch(() => {});
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError("");
@@ -43,20 +39,23 @@ export default function WaitlistSection() {
     }
     setLoading(true);
 
-    const body = new FormData();
-    body.append(GF.FIELD_NAME, form.name.trim());
-    body.append(GF.FIELD_PHONE, `+90 ${form.phone.trim()}`);
-    if (form.email.trim()) body.append(GF.FIELD_EMAIL, form.email.trim());
-
     try {
-      // no-cors: CORS hatası fırlatır ama veri Google Forms'a iletilir
-      await fetch(GF.ACTION_URL, { method: "POST", mode: "no-cors", body });
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          phone: form.phone.trim(),
+          email: form.email.trim(),
+        }),
+      });
+      const { count } = await res.json();
+      setJoined(count);
     } catch {
-      // no-cors modunda catch her zaman çalışır — ignore
+      setJoined((prev) => prev + 1); // API erişilemezse yine göster
     }
 
     setLoading(false);
-    setJoined((prev) => prev + 1);
     setSubmitted(true);
   };
 
