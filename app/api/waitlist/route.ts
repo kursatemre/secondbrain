@@ -13,8 +13,15 @@ const GF = {
   FIELD_EMAIL: "entry.132157625",
 } as const;
 
-// REDIS_URL: redis://default:TOKEN@HOSTNAME.upstash.io:PORT
 function getRedis(): Redis {
+  // Vercel KV direkt REST env var'larını kullan (öncelikli)
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    return new Redis({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    });
+  }
+  // Fallback: REDIS_URL'den türet — redis://default:TOKEN@HOST.upstash.io:PORT
   const url = new URL(process.env.REDIS_URL!);
   return new Redis({
     url: `https://${url.hostname}`,
@@ -22,7 +29,6 @@ function getRedis(): Redis {
   });
 }
 
-// Redis çağrısını ms süre içinde tamamlamaya zorla, aksi hâlde hata fırlat
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -32,7 +38,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-// GET /api/waitlist → mevcut katılımcı sayısını döner
 export async function GET() {
   try {
     const joins = await withTimeout(
@@ -40,12 +45,12 @@ export async function GET() {
       REDIS_TIMEOUT_MS
     );
     return Response.json({ count: INITIAL_COUNT + (joins ?? 0) });
-  } catch {
+  } catch (e) {
+    console.error("[waitlist GET]", e);
     return Response.json({ count: INITIAL_COUNT });
   }
 }
 
-// POST /api/waitlist → Google Forms'a gönderir (fire & forget) + sayacı artırır
 export async function POST(request: Request) {
   const { name, phone, email } = await request.json();
 
@@ -54,8 +59,6 @@ export async function POST(request: Request) {
   body.append(GF.FIELD_PHONE, `+90 ${phone}`);
   if (email) body.append(GF.FIELD_EMAIL, email);
 
-  // redirect: "manual" → redirect zincirini takip etme, ilk yanıtta dur
-  // Böylece Google Forms bekleme fonksiyon kapanışını engellemez
   fetch(GF_ACTION_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -69,7 +72,8 @@ export async function POST(request: Request) {
       REDIS_TIMEOUT_MS
     );
     return Response.json({ count: INITIAL_COUNT + joins });
-  } catch {
+  } catch (e) {
+    console.error("[waitlist POST]", e);
     return Response.json({ count: INITIAL_COUNT + 1 });
   }
 }
