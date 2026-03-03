@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Brain } from "lucide-react";
 
 export default function Footer() {
@@ -38,7 +39,7 @@ export default function Footer() {
           {/* Center: developer credit */}
           <p className="text-xs text-center text-white/20">
             <a
-              href="https://orionsoft.com.tr"
+              href="https://orionsoft.dev"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-white/45 transition-colors"
@@ -50,24 +51,24 @@ export default function Footer() {
 
           {/* Right: links */}
           <div className="flex items-center gap-4">
-            <a
-              href="#"
+            <Link
+              href="/gizlilik"
               className="text-xs text-white/20 hover:text-white/45 transition-colors"
             >
               Gizlilik Politikası
-            </a>
-            <a
-              href="#"
+            </Link>
+            <Link
+              href="/kvkk"
               className="text-xs text-white/20 hover:text-white/45 transition-colors"
             >
               KVKK
-            </a>
-            <a
-              href="mailto:merhaba@secondbrain.com.tr"
+            </Link>
+            <Link
+              href="/iletisim"
               className="text-xs text-white/20 hover:text-white/45 transition-colors"
             >
               İletişim
-            </a>
+            </Link>
             <span className="text-[11px] text-white/14">&copy; {year}</span>
           </div>
         </div>
