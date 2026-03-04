@@ -120,15 +120,26 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('403') || msg.includes('do not support this site')) {
-        // Scraping olmasa da kullanıcı notunu kaydet
         if (userContext) {
-          const embedding = await withRetry(() => embed(`URL: ${url}\n${userContext}`), 3, 1000);
-          await saveMemory(user.id, `URL: ${url}\n${userContext}`, embedding, {
+          // Kullanıcının açıklamasını GPT ile zenginleştir
+          const enriched = await withRetry(
+            () => chat(
+              `Kullanıcı bir sosyal medya linki (Instagram/TikTok vb.) paylaştı ve kısa bir açıklama yazdı.
+Bu açıklamayı analiz ederek hafızaya kaydedilecek zengin bir metin oluştur.
+İçeriğin ne hakkında olduğunu, kategorisini, anahtar kelimeleri ve önemli detayları çıkar.
+Türkçe yaz, 3-5 cümle.`,
+              `Link: ${url}\nKullanıcı notu: ${userContext}`
+            ),
+            3, 1000
+          );
+          const contentToSave = `URL: ${url}\nKullanıcı notu: ${userContext}\nİçerik analizi: ${enriched}`;
+          const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
+          await saveMemory(user.id, contentToSave, embedding, {
             type: 'link', url, saved_at: new Date().toISOString(),
           });
-          await sendMessage(user.whatsapp_id, `✅ Notun kaydedildi! (Bu site scraping desteklemiyor ama yazdığın not hafızaya alındı.)`);
+          await sendMessage(user.whatsapp_id, `✅ Kaydedildi!\n\n🧠 *Analiz:*\n${enriched}`);
         } else {
-          await sendMessage(user.whatsapp_id, '❌ Bu site desteklenmiyor (Instagram, TikTok vb.). Makale veya web sayfası linklerini kaydedebilirsin.');
+          await sendMessage(user.whatsapp_id, '💡 Bu site (Instagram, TikTok vb.) otomatik okunamıyor. Linke ek olarak kısa bir açıklama yaz — örn: "et yemeği tarifi" veya "bu ürünü al". Öyle kaydederim.');
         }
         return;
       }
