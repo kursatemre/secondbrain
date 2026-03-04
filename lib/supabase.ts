@@ -101,3 +101,21 @@ export async function recordKvkkConsent(userId: string) {
     .eq('id', userId);
   if (error) throw new Error(`recordKvkkConsent: ${error.message}`);
 }
+
+/** KVKK silme talebi kaydeder */
+export async function requestDataDeletion(userId: string, whatsappId: string) {
+  const { error } = await getSupabase()
+    .from('deletion_requests')
+    .insert({ user_id: userId, whatsapp_id: whatsappId, requested_at: new Date().toISOString() });
+  if (error) throw new Error(`requestDataDeletion: ${error.message}`);
+}
+
+/** Kullanıcının tüm verilerini ve kaydını siler (hard delete) */
+export async function deleteUserData(userId: string) {
+  // memories ON DELETE CASCADE ile otomatik silinir
+  const { error } = await getSupabase()
+    .from('users')
+    .delete()
+    .eq('id', userId);
+  if (error) throw new Error(`deleteUserData: ${error.message}`);
+}

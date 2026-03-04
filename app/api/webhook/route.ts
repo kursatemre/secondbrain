@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     return new Response('OK', { status: 200 });
   }
 
-  if (!['text', 'audio', 'image'].includes(message.type as string)) {
+  if (!['text', 'audio', 'image', 'interactive'].includes(message.type as string)) {
     console.log(`[Webhook] Desteklenmeyen tip: ${message.type}`);
     return new Response('OK', { status: 200 });
   }

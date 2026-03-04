@@ -104,6 +104,22 @@ BEGIN
 END;
 $$;
 
+-- KVKK silme talepleri (audit log + 72h SLA takibi)
+CREATE TABLE IF NOT EXISTS deletion_requests (
+  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID        REFERENCES users(id) ON DELETE SET NULL,
+  whatsapp_id   TEXT        NOT NULL,
+  requested_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at  TIMESTAMPTZ DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS deletion_requests_user_id_idx
+  ON deletion_requests(user_id);
+
+CREATE INDEX IF NOT EXISTS deletion_requests_completed_at_idx
+  ON deletion_requests(completed_at)
+  WHERE completed_at IS NULL;
+
 CREATE OR REPLACE FUNCTION increment_message_count(user_id_param UUID)
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN

@@ -17,6 +17,33 @@ export async function sendMessage(to: string, text: string) {
   );
 }
 
+/** KVKK onayı gibi tek/çok butonlu interactive mesaj gönderir */
+export async function sendButtonMessage(
+  to: string,
+  bodyText: string,
+  buttons: { id: string; title: string }[]
+) {
+  await axios.post(
+    `${baseUrl()}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: bodyText },
+        action: {
+          buttons: buttons.map(b => ({
+            type: 'reply',
+            reply: { id: b.id, title: b.title },
+          })),
+        },
+      },
+    },
+    { headers: headers() }
+  );
+}
+
 /** WhatsApp media ID ile dosyayı indirir */
 export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const { data: info } = await axios.get(

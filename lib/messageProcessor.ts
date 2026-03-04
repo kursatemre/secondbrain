@@ -5,24 +5,64 @@ import {
   incrementMessageCount,
   hasAcceptedKvkk,
   recordKvkkConsent,
+  requestDataDeletion,
+  deleteUserData,
 } from './supabase';
 import { embed, chat, analyzeImage } from './openai-client';
-import { sendMessage, downloadMedia } from './whatsapp';
+import { sendMessage, sendButtonMessage, downloadMedia } from './whatsapp';
 import { scrapeUrl } from './firecrawl';
 import { fetchSocialMeta } from './socialMedia';
 import { transcribeAudio } from './groq';
 import { withRetry } from './retry';
 
+// ─── MESAJLAR ────────────────────────────────────────────────────────────────
 
-const KVKK_TEXT = `🔒 *Kişisel Verilerin Korunması Hakkında Bilgilendirme*
+const WELCOME_TEXT = `👋 *Second Brain'e Hoş Geldin!*
 
-Second Brain, sana daha iyi hizmet sunabilmek için WhatsApp mesajlarını (metin, ses, link) işler ve şifreli olarak saklar.
+Ben senin kişisel AI hafızan. WhatsApp üzerinden her şeyi kaydeder, istediğinde bulup getiririm.
 
-• Veriler yalnızca senin sorularına cevap vermek için kullanılır
-• Üçüncü taraflarla paylaşılmaz
-• İstediğin zaman silinmesini talep edebilirsin (KVKK Madde 11)
+*Ne yapabilirsin?*
 
-Devam etmek için *KABUL EDİYORUM* yaz.`;
+📝 *Not* — "Yarın saat 15 toplantı var"
+🔗 *Link* — URL at, özetleyip saklarım
+🎤 *Ses notu* — Sesli mesaj gönder, yazıya çevirip kaklarım
+🖼️ *Görsel* — Fotoğraf at, analiz edip saklarım
+
+*Sonra istediğini sor:*
+"O toplantı ne zamandı?" · "Pasta tarifini bul" · "Hangi linki atmıştım?"
+
+Devam etmek için önce gizlilik onayı gerekiyor 👇`;
+
+const KVKK_TEXT = `🔒 *Gizlilik ve Veri Koruma Bildirimi*
+
+*Veri Sorumlusu:* Second Brain · secondbrain.com.tr
+
+*İşlenen Kişisel Veriler:*
+• WhatsApp telefon numaranız
+• Gönderdiğiniz metin, ses, görsel ve linkler
+
+*Amaç:* Kişisel dijital hafıza hizmeti sunmak
+
+*Hukuki Dayanak:* Açık rıza — KVKK Madde 5/1-a · GDPR Article 6/1-a
+
+*Saklama Süresi:* Hesabınız aktif olduğu süre boyunca
+
+*Veri Aktarımı:* İçerikleriniz AI işleme amacıyla OpenAI ve Groq altyapısı üzerinden şifreli olarak iletilir. Üçüncü taraflarla paylaşılmaz, reklam amacıyla kullanılmaz.
+
+*Haklarınız (KVKK Md. 11 · GDPR Art. 17):*
+• Verilerinize erişme ve düzeltme talep etme
+• Tüm verilerinizin silinmesini isteme → "tüm verilerimi sil" yazın
+• İşlemeye itiraz etme
+
+Onaylamak için aşağıdaki butona basın:`;
+
+const DELETE_CONFIRM_TEXT = `⚠️ *Veri Silme Talebi*
+
+Tüm notların, linkler, ses ve görsel analizlerin kalıcı olarak silinecek.
+
+Bu işlem *geri alınamaz.*`;
+
+// ─── TIPLER ──────────────────────────────────────────────────────────────────
 
 type MessageType = 'audio' | 'image' | 'link' | 'question' | 'note';
 
@@ -30,6 +70,10 @@ export type WhatsAppMessage = {
   type: string;
   text?: { body: string };
   audio?: { id: string };
+  interactive?: {
+    type: string;
+    button_reply?: { id: string; title: string };
+  };
   [key: string]: unknown;
 };
 
@@ -40,6 +84,8 @@ type UserRecord = {
   message_count: number;
 };
 
+// ─── INTENT DETECTION ────────────────────────────────────────────────────────
+
 async function detectMessageType(message: WhatsAppMessage): Promise<MessageType> {
   if (message.type === 'audio') return 'audio';
   if (message.type === 'image') return 'image';
@@ -47,7 +93,6 @@ async function detectMessageType(message: WhatsAppMessage): Promise<MessageType>
   const text: string = message.text?.body ?? '';
   if (/https?:\/\/[^\s]+/i.test(text)) return 'link';
 
-  // GPT ile intent sınıflandırma
   const result = await chat(
     `Sen bir mesaj sınıflandırıcısın. Kullanıcının mesajının amacını belirle.
 Sadece tek kelime döndür: "question" veya "note"
@@ -61,7 +106,7 @@ Sadece tek kelime döndür: "question" veya "note"
 "note": Kullanıcı YENİ bir bilgi, not, fikir, plan veya hatırlatıcı kaydediyor. Geçmişe atıf yok.
 
 Örnekler:
-- "Bi Instagram linki atmıştım sana" → question (geçmişte gönderilen bir şeyi arıyor)
+- "Bi Instagram linki atmıştım sana" → question
 - "Patlıcan musakka tarifi neydi" → question
 - "Cumartesi saat 15 toplantı var" → note
 - "O et yemeği tarifinin linkini bul" → question
@@ -75,22 +120,65 @@ Mesaj: ${text}`,
   return intent === 'question' ? 'question' : 'note';
 }
 
+// ─── ANA YÖNLENDIRICI ────────────────────────────────────────────────────────
+
 /** Ana işlem yönlendirici — webhook'tan fire-and-forget olarak çağrılır */
 export async function processMessage(message: WhatsAppMessage, senderPhone: string) {
   const user = await getOrCreateUser(senderPhone);
 
-  // ─── KVKK onay kontrolü ─────────────────────────────────────────────────
-  const text = message.text?.body?.trim() ?? '';
+  // ─── Buton cevapları (interactive) ──────────────────────────────────────
+  if (message.type === 'interactive' && message.interactive?.type === 'button_reply') {
+    const buttonId = message.interactive.button_reply?.id;
 
-  if (text.toUpperCase() === 'KABUL EDİYORUM') {
-    await recordKvkkConsent(user.id);
-    await sendMessage(senderPhone, '✅ Onayın alındı! Artık Second Brain\'i kullanabilirsin. Bir not, link veya ses mesajı gönder.');
+    if (buttonId === 'kvkk_accept') {
+      await recordKvkkConsent(user.id);
+      await sendMessage(
+        senderPhone,
+        '✅ *Onayın alındı!*\n\nArtık Second Brain\'ini kullanabilirsin.\n\nBir not, link, ses mesajı veya görsel gönder — hepsini kaydeder, istediğinde bulup getiririm 🧠'
+      );
+      return;
+    }
+
+    if (buttonId === 'delete_confirm') {
+      await deleteUserData(user.id);
+      await sendMessage(
+        senderPhone,
+        '✅ Tüm verilerin silindi.\n\nSecond Brain\'i tekrar kullanmak istersen yeni bir mesaj gönder, yeniden başlarsın.'
+      );
+      return;
+    }
+
+    if (buttonId === 'delete_cancel') {
+      await sendMessage(senderPhone, '👍 İptal edildi, verilerın güvende.');
+      return;
+    }
+
     return;
   }
 
+  const text = message.text?.body?.trim() ?? '';
+
+  // ─── Veri silme talebi ───────────────────────────────────────────────────
+  const textLower = text.toLowerCase();
+  if (textLower.includes('verilerimi sil')) {
+    await requestDataDeletion(user.id, senderPhone);
+    await sendButtonMessage(senderPhone, DELETE_CONFIRM_TEXT, [
+      { id: 'delete_confirm', title: '🗑️ Evet, sil' },
+      { id: 'delete_cancel',  title: '↩️ İptal' },
+    ]);
+    return;
+  }
+
+  // ─── KVKK onay kontrolü ─────────────────────────────────────────────────
   const accepted = await hasAcceptedKvkk(user.id);
   if (!accepted) {
-    await sendMessage(senderPhone, KVKK_TEXT);
+    // İlk kez geliyorsa karşılama mesajını da gönder
+    if (user.message_count === 0) {
+      await sendMessage(senderPhone, WELCOME_TEXT);
+    }
+    await sendButtonMessage(senderPhone, KVKK_TEXT, [
+      { id: 'kvkk_accept', title: '✅ Kabul Ediyorum' },
+    ]);
     return;
   }
   // ────────────────────────────────────────────────────────────────────────
@@ -121,7 +209,6 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
   const isLocationLink = /maps\.google|goo\.gl\/maps|maps\.app\.goo|yandex.*maps|waze\.com/i.test(url);
   const isSocialMedia = /instagram\.com|tiktok\.com/i.test(url);
 
-  // Sosyal medya linkleri için önce oEmbed dene, Firecrawl'a gönderme
   if (isSocialMedia) {
     const socialMeta = await fetchSocialMeta(url);
     const contextParts = [
@@ -267,7 +354,6 @@ async function processQuestion(message: WhatsAppMessage, user: UserRecord) {
     .map((m, i) => `[${i + 1}] ${m.content.slice(0, 500)}`)
     .join('\n\n---\n\n');
 
-  // Hafızadan URL'leri çıkar, cevaba ekle
   const urls = memories
     .map(m => {
       const match = m.content.match(/URL:\s*(https?:\/\/[^\s\n]+)/);
