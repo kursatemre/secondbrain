@@ -61,7 +61,7 @@ export async function saveMemory(
   if (error) throw new Error(`saveMemory: ${error.message}`);
 }
 
-/** pgvector ile semantik arama yapar */
+/** pgvector ile semantik arama yapar (free + kisisel) */
 export async function searchMemories(
   userId: string,
   queryEmbedding: number[],
@@ -75,6 +75,25 @@ export async function searchMemories(
   });
 
   if (error) throw new Error(`searchMemories: ${error.message}`);
+  return (data as Memory[]) || [];
+}
+
+/** Semantic + Türkçe full-text hibrit arama (profesyonel + sinirsiz) */
+export async function searchMemoriesHybrid(
+  userId: string,
+  queryEmbedding: number[],
+  queryText: string,
+  limit = 8
+): Promise<Memory[]> {
+  const { data, error } = await getSupabase().rpc('match_memories_hybrid', {
+    query_embedding: queryEmbedding,
+    query_text: queryText,
+    match_user_id: userId,
+    match_threshold: 0.3,
+    match_count: limit,
+  });
+
+  if (error) throw new Error(`searchMemoriesHybrid: ${error.message}`);
   return (data as Memory[]) || [];
 }
 

@@ -82,7 +82,7 @@ CREATE POLICY "memories_owner_delete"
 CREATE OR REPLACE FUNCTION match_memories(
   query_embedding  VECTOR(1536),
   match_user_id    UUID,
-  match_threshold  FLOAT DEFAULT 0.5,
+  match_threshold  FLOAT DEFAULT 0.3,
   match_count      INT   DEFAULT 5
 )
 RETURNS TABLE (

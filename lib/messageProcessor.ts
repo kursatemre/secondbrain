@@ -2,6 +2,7 @@ import {
   getOrCreateUser,
   saveMemory,
   searchMemories,
+  searchMemoriesHybrid,
   checkUsage,
   hasAcceptedKvkk,
   recordKvkkConsent,
@@ -379,11 +380,23 @@ async function processAudio(message: WhatsAppMessage, user: UserRecord) {
   );
 }
 
+// Plan bazlı arama konfigürasyonu
+const SEARCH_CONFIG: Record<UserRecord['plan'], { limit: number; hybrid: boolean }> = {
+  free:         { limit: 3,  hybrid: false },
+  kisisel:      { limit: 5,  hybrid: false },
+  profesyonel:  { limit: 8,  hybrid: true  },
+  sinirsiz:     { limit: 10, hybrid: true  },
+};
+
 // ─── QUESTION ───────────────────────────────────────────────────────────────
 async function processQuestion(message: WhatsAppMessage, user: UserRecord) {
   const query: string = message.text!.body;
   const queryEmbedding = await withRetry(() => embed(query), 3, 1000);
-  const memories = await searchMemories(user.id, queryEmbedding, 5);
+
+  const { limit, hybrid } = SEARCH_CONFIG[user.plan] ?? SEARCH_CONFIG.free;
+  const memories = hybrid
+    ? await searchMemoriesHybrid(user.id, queryEmbedding, query, limit)
+    : await searchMemories(user.id, queryEmbedding, limit);
 
   if (memories.length === 0) {
     await sendMessage(user.whatsapp_id, '🔍 Bu konuyla ilgili henüz bir şey kaydetmemişsin.');
