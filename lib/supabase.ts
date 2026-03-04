@@ -15,7 +15,7 @@ function getSupabase(): SupabaseClient {
 export interface User {
   id: string;
   whatsapp_id: string;
-  plan: 'free' | 'premium';
+  plan: 'free' | 'kisisel' | 'profesyonel' | 'sinirsiz';
   message_count: number;
   kvkk_accepted_at: string | null;
 }
@@ -78,9 +78,17 @@ export async function searchMemories(
   return (data as Memory[]) || [];
 }
 
-/** Mesaj sayacını artırır */
-export async function incrementMessageCount(userId: string) {
-  await getSupabase().rpc('increment_message_count', { user_id_param: userId });
+/** Aylık kullanım limitini kontrol eder ve izin varsa sayacı artırır */
+export async function checkUsage(
+  userId: string,
+  type: 'message' | 'audio' | 'url'
+): Promise<{ allowed: boolean; count: number; limit: number }> {
+  const { data, error } = await getSupabase().rpc('check_and_increment_usage', {
+    user_id_param: userId,
+    usage_type: type,
+  });
+  if (error) throw new Error(`checkUsage: ${error.message}`);
+  return data as { allowed: boolean; count: number; limit: number };
 }
 
 /** Kullanıcının KVKK onayı verip vermediğini kontrol eder */

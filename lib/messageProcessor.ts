@@ -2,7 +2,7 @@ import {
   getOrCreateUser,
   saveMemory,
   searchMemories,
-  incrementMessageCount,
+  checkUsage,
   hasAcceptedKvkk,
   recordKvkkConsent,
   requestDataDeletion,
@@ -81,7 +81,7 @@ export type WhatsAppMessage = {
 type UserRecord = {
   id: string;
   whatsapp_id: string;
-  plan: 'free' | 'premium';
+  plan: 'free' | 'kisisel' | 'profesyonel' | 'sinirsiz';
   message_count: number;
 };
 
@@ -184,7 +184,19 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
   }
   // ────────────────────────────────────────────────────────────────────────
 
-  await incrementMessageCount(user.id);
+  // ─── Aylık mesaj limiti ──────────────────────────────────────────────────
+  const msgUsage = await checkUsage(user.id, 'message');
+  if (!msgUsage.allowed) {
+    const limitText = user.plan === 'free'
+      ? `Ücretsiz planda toplam ${msgUsage.limit} mesaj hakkın var ve hepsini kullandın.`
+      : `Bu ay kullanabileceğin ${msgUsage.limit} mesaj hakkını doldurdun.`;
+    await sendMessage(
+      senderPhone,
+      `📵 ${limitText}\n\nDevam etmek için planını yükselt: secondbrain.com.tr`
+    );
+    return;
+  }
+  // ────────────────────────────────────────────────────────────────────────
 
   const type = await detectMessageType(message);
   console.log(`[Processor] ${senderPhone} → ${type}`);
@@ -205,6 +217,15 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
 
 // ─── LINK ───────────────────────────────────────────────────────────────────
 async function processLink(message: WhatsAppMessage, user: UserRecord) {
+  const urlUsage = await checkUsage(user.id, 'url');
+  if (!urlUsage.allowed) {
+    await sendMessage(
+      user.whatsapp_id,
+      `🔗 Bu ay kaydedebileceğin ${urlUsage.limit} link hakkını doldurdun.\n\nDaha fazla link kaydetmek için planını yükselt: secondbrain.com.tr`
+    );
+    return;
+  }
+
   const text: string = message.text!.body;
   const url = text.match(/https?:\/\/[^\s]+/i)![0];
 
@@ -328,6 +349,14 @@ async function processImage(message: WhatsAppMessage, user: UserRecord) {
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10 MB
 
 async function processAudio(message: WhatsAppMessage, user: UserRecord) {
+  const audioUsage = await checkUsage(user.id, 'audio');
+  if (!audioUsage.allowed) {
+    await sendMessage(
+      user.whatsapp_id,
+      `🎤 Bu ay ses notu limitini doldurdun (${audioUsage.limit} ses/ay).\n\nDaha fazla ses notu için planını yükselt: secondbrain.com.tr`
+    );
+    return;
+  }
   await sendMessage(user.whatsapp_id, '🎤 Ses mesajı işleniyor...');
 
   const { buffer, mimeType, fileSize } = await withRetry(() => downloadMedia((message.audio as { id: string }).id), 3, 1000);
