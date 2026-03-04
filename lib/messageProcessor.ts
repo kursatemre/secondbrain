@@ -6,7 +6,7 @@ import {
   hasAcceptedKvkk,
   recordKvkkConsent,
 } from './supabase';
-import { embed, chat } from './openai-client';
+import { embed, chat, analyzeImage } from './openai-client';
 import { sendMessage, downloadMedia } from './whatsapp';
 import { scrapeUrl } from './firecrawl';
 import { fetchSocialMeta } from './socialMedia';
@@ -24,7 +24,7 @@ Second Brain, sana daha iyi hizmet sunabilmek için WhatsApp mesajlarını (meti
 
 Devam etmek için *KABUL EDİYORUM* yaz.`;
 
-type MessageType = 'audio' | 'link' | 'question' | 'note';
+type MessageType = 'audio' | 'image' | 'link' | 'question' | 'note';
 
 export type WhatsAppMessage = {
   type: string;
@@ -42,6 +42,7 @@ type UserRecord = {
 
 async function detectMessageType(message: WhatsAppMessage): Promise<MessageType> {
   if (message.type === 'audio') return 'audio';
+  if (message.type === 'image') return 'image';
 
   const text: string = message.text?.body ?? '';
   if (/https?:\/\/[^\s]+/i.test(text)) return 'link';
@@ -102,6 +103,7 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
   try {
     if (type === 'link')          await processLink(message, user);
     else if (type === 'audio')    await processAudio(message, user);
+    else if (type === 'image')    await processImage(message, user);
     else if (type === 'question') await processQuestion(message, user);
     else                          await processNote(message, user);
   } catch (err) {
@@ -202,6 +204,34 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
   });
 
   await sendMessage(user.whatsapp_id, `✅ Link kaydedildi!\n\n📄 *Özet:*\n${summary}`);
+}
+
+// ─── IMAGE ──────────────────────────────────────────────────────────────────
+async function processImage(message: WhatsAppMessage, user: UserRecord) {
+  await sendMessage(user.whatsapp_id, '🖼️ Görsel analiz ediliyor...');
+
+  const imageId = (message.image as { id: string } | undefined)?.id;
+  const caption = (message.image as { caption?: string } | undefined)?.caption ?? '';
+
+  if (!imageId) {
+    await sendMessage(user.whatsapp_id, '⚠️ Görsel alınamadı, tekrar dene.');
+    return;
+  }
+
+  const { buffer, mimeType } = await withRetry(() => downloadMedia(imageId), 3, 1000);
+  const analysis = await withRetry(() => analyzeImage(buffer, mimeType, caption || undefined), 3, 1000);
+
+  const contentToSave = [
+    caption ? `Kullanıcı notu: ${caption}` : '',
+    `Görsel analizi: ${analysis}`,
+  ].filter(Boolean).join('\n');
+
+  const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
+  await saveMemory(user.id, contentToSave, embedding, {
+    type: 'image', saved_at: new Date().toISOString(),
+  });
+
+  await sendMessage(user.whatsapp_id, `✅ Görsel kaydedildi!\n\n🧠 *Analiz:*\n${analysis}`);
 }
 
 // ─── AUDIO ──────────────────────────────────────────────────────────────────

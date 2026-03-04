@@ -15,6 +15,28 @@ export async function embed(text: string): Promise<number[]> {
   return response.data[0].embedding;
 }
 
+/** GPT-4o-mini vision ile görseli analiz eder */
+export async function analyzeImage(imageBuffer: Buffer, mimeType: string, caption?: string): Promise<string> {
+  const base64 = imageBuffer.toString('base64');
+  const response = await getOpenAI().chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+        {
+          type: 'text',
+          text: caption
+            ? `Bu görseli detaylıca analiz et. Kullanıcı notu: "${caption}". İçeriği, kategorisi ve önemli detayları Türkçe olarak yaz. Hafızaya kaydedilecek.`
+            : 'Bu görseli detaylıca analiz et. İçeriği, kategorisi, önemli detayları ve anahtar kelimeleri Türkçe olarak yaz. Hafızaya kaydedilecek.',
+        },
+      ],
+    }],
+    max_tokens: 600,
+  });
+  return response.choices[0].message.content ?? '';
+}
+
 /** GPT-4o-mini ile tamamlama üretir */
 export async function chat(systemPrompt: string, userMessage: string): Promise<string> {
   const response = await getOpenAI().chat.completions.create({
