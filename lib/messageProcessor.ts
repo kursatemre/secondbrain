@@ -102,30 +102,54 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
   const text: string = message.text!.body;
   const url = text.match(/https?:\/\/[^\s]+/i)![0];
 
-  await sendMessage(user.whatsapp_id, '🔗 Link işleniyor, biraz bekle...');
+  const userContext = text.replace(/https?:\/\/[^\s]+/gi, '').trim();
+  const isLocationLink = /maps\.google|goo\.gl\/maps|maps\.app\.goo|yandex.*maps|waze\.com/i.test(url);
 
-  let markdown: string;
-  try {
-    markdown = await withRetry(() => scrapeUrl(url), 2, 1000);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '';
-    if (msg.includes('403') || msg.includes('do not support this site')) {
-      await sendMessage(user.whatsapp_id, '❌ Bu site desteklenmiyor (Instagram, TikTok vb.). Makale veya web sayfası linklerini kaydedebilirsin.');
-      return;
+  let summary = '';
+  let truncated = '';
+
+  if (isLocationLink) {
+    // Konum linkleri scraping'e uygun değil — kullanıcı notunu kaydet
+    summary = userContext || 'Konum kaydedildi.';
+  } else {
+    await sendMessage(user.whatsapp_id, '🔗 Link işleniyor, biraz bekle...');
+
+    let markdown: string;
+    try {
+      markdown = await withRetry(() => scrapeUrl(url), 2, 1000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('403') || msg.includes('do not support this site')) {
+        // Scraping olmasa da kullanıcı notunu kaydet
+        if (userContext) {
+          const embedding = await withRetry(() => embed(`URL: ${url}\n${userContext}`), 3, 1000);
+          await saveMemory(user.id, `URL: ${url}\n${userContext}`, embedding, {
+            type: 'link', url, saved_at: new Date().toISOString(),
+          });
+          await sendMessage(user.whatsapp_id, `✅ Notun kaydedildi! (Bu site scraping desteklemiyor ama yazdığın not hafızaya alındı.)`);
+        } else {
+          await sendMessage(user.whatsapp_id, '❌ Bu site desteklenmiyor (Instagram, TikTok vb.). Makale veya web sayfası linklerini kaydedebilirsin.');
+        }
+        return;
+      }
+      throw err;
     }
-    throw err;
+    truncated = markdown.slice(0, 6000);
+    summary = await withRetry(
+      () => chat(
+        'Sen bir içerik özetleyicisisin. Verilen makaleyi Türkçe olarak 3-5 cümleyle özetle. Başlık ve ana fikirler dahil olsun.',
+        truncated
+      ),
+      3, 1000
+    );
   }
-  const truncated = markdown.slice(0, 6000);
 
-  const summary = await withRetry(
-    () => chat(
-      'Sen bir içerik özetleyicisisin. Verilen makaleyi Türkçe olarak 3-5 cümleyle özetle. Başlık ve ana fikirler dahil olsun.',
-      truncated
-    ),
-    3, 1000
-  );
-
-  const contentToSave = `URL: ${url}\nÖzet: ${summary}\n\nTam içerik:\n${truncated}`;
+  const contentToSave = [
+    `URL: ${url}`,
+    userContext ? `Kullanıcı notu: ${userContext}` : '',
+    `Özet: ${summary}`,
+    truncated ? `Tam içerik:\n${truncated}` : '',
+  ].filter(Boolean).join('\n');
   const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
   await saveMemory(user.id, contentToSave, embedding, {
     type: 'link', url, saved_at: new Date().toISOString(),
