@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brain, Menu, X } from "lucide-react";
 
-const WHATSAPP_URL = "https://wa.me/905xxxxxxxxx";
+const WHATSAPP_URL = "https://wa.me/15558587000";
 
 function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -57,7 +57,7 @@ export default function Navbar() {
             {[
               { href: "#process", label: "Nasıl Çalışır" },
               { href: "#features", label: "Özellikler" },
-              { href: "#waitlist", label: "Bekleme Listesi" },
+              { href: "#pricing", label: "Fiyatlar" },
             ].map((link) => (
               <a
                 key={link.href}
@@ -72,10 +72,13 @@ export default function Navbar() {
           {/* CTA */}
           <div className="hidden md:block">
             <a
-              href="#waitlist"
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2 bg-[#00FF9D] text-black text-sm font-bold rounded-xl hover:bg-[#00FF9D]/90 transition-all hover:shadow-[0_0_20px_rgba(0,255,157,0.35)]"
             >
-              Beta&apos;ya Katıl
+              <WhatsAppIcon />
+              Hemen Başla
             </a>
           </div>
 
@@ -108,7 +111,7 @@ export default function Navbar() {
               {[
                 { href: "#process", label: "Nasıl Çalışır" },
                 { href: "#features", label: "Özellikler" },
-                { href: "#waitlist", label: "Bekleme Listesi" },
+                { href: "#pricing", label: "Fiyatlar" },
               ].map((link) => (
                 <a
                   key={link.href}
@@ -120,11 +123,14 @@ export default function Navbar() {
                 </a>
               ))}
               <a
-                href="#waitlist"
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-[#00FF9D] text-black text-sm font-bold rounded-xl mt-2"
               >
-                Beta&apos;ya Katıl — Ücretsiz
+                <WhatsAppIcon />
+                Hemen Başla — Ücretsiz
               </a>
             </div>
           </motion.div>

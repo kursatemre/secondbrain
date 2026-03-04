@@ -1,8 +1,17 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowDown } from "lucide-react";
 import WhatsAppMockup from "./WhatsAppMockup";
+
+const WHATSAPP_URL = "https://wa.me/15558587000";
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current flex-shrink-0">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  );
+}
 
 export default function HeroSection() {
   return (
@@ -54,27 +63,28 @@ export default function HeroSection() {
                   animate={{ opacity: [0.4, 1, 0.4] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
                 />
-                BETA &bull; Bekleme Listesi Açıldı
+                BETA · Yayında
               </span>
             </div>
 
             <h1 className="font-heading text-4xl sm:text-5xl lg:text-[3.1rem] font-bold leading-[1.08] mb-5 tracking-tight">
-              Second Brain Beta{" "}
-              <span style={{ color: "#00ff9d" }}>Bekleme&nbsp;Listesi</span>{" "}
-              Açıldı!&nbsp;🧠
+              Artık Her Şey{" "}
+              <span style={{ color: "#00ff9d" }}>Aklında&nbsp;Kalıyor</span>{" "}
+              🧠
             </h1>
 
             <p className="text-lg text-white/45 mb-10 max-w-lg mx-auto lg:mx-0 leading-relaxed">
-              WhatsApp&apos;ı ikinci beynine dönüştür — unutma zahmetini
-              AI&apos;ya bırak.{" "}
+              WhatsApp&apos;a not, link veya ses at —{" "}
               <span className="text-white/65">
-                Türkiye&apos;nin ilk AI hafıza asistanı
+                Second Brain kaydeder, bulur, hatırlatır.
               </span>{" "}
-              beta&apos;ya öncelikli katıl!
+              Kurulum yok. Uygulama indirme yok. Sadece bir mesaj gönder.
             </p>
 
             <motion.a
-              href="#waitlist"
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.96 }}
               className="inline-flex items-center gap-3 px-8 py-4 text-black font-bold text-base rounded-2xl"
@@ -83,35 +93,26 @@ export default function HeroSection() {
                 boxShadow: "0 0 35px rgba(0,255,157,0.32)",
               }}
             >
-              Bekleme Listesine Katıl – Ücretsiz Beta Önceliği
-              <ArrowDown className="w-5 h-5" />
+              <WhatsAppIcon />
+              WhatsApp&apos;ta Hemen Başla — Ücretsiz
             </motion.a>
 
             <p className="text-sm text-white/28 mt-4">
-              İlk 500 kişi özel davetiye alacak — numaranı bırak, seni
-              ekleyelim!
+              Kredi kartı gerekmez · 30 mesaj ücretsiz · İstediğin zaman iptal et
             </p>
 
-            {/* Social proof */}
-            <div className="flex items-center gap-3 justify-center lg:justify-start mt-8">
-              <div className="flex -space-x-2">
-                {["#00ff9d", "#00d4ff", "#a78bfa", "#fb923c"].map((c, i) => (
-                  <div
-                    key={i}
-                    className="w-7 h-7 rounded-full border-2"
-                    style={{
-                      background: `${c}30`,
-                      borderColor: `${c}90`,
-                    }}
-                  />
-                ))}
-              </div>
-              <p className="text-sm text-white/35">
-                <span style={{ color: "#00ff9d" }} className="font-semibold">
-                  247+
-                </span>{" "}
-                kişi zaten listede
-              </p>
+            {/* Trust signals */}
+            <div className="flex flex-wrap items-center gap-5 justify-center lg:justify-start mt-8">
+              {[
+                { val: "30", label: "ücretsiz mesaj" },
+                { val: "7/24", label: "erişim" },
+                { val: "%100", label: "WhatsApp üzerinden" },
+              ].map((s) => (
+                <div key={s.label} className="flex items-center gap-1.5">
+                  <span className="font-bold text-sm" style={{ color: "#00ff9d" }}>{s.val}</span>
+                  <span className="text-xs text-white/35">{s.label}</span>
+                </div>
+              ))}
             </div>
           </motion.div>
 

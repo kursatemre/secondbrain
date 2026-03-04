@@ -1,9 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 
-const WHATSAPP_URL = "https://wa.me/905xxxxxxxxx";
+const WHATSAPP_URL = "https://wa.me/15558587000";
 
 function WhatsAppIcon() {
   return (
@@ -13,50 +13,83 @@ function WhatsAppIcon() {
   );
 }
 
-const plans = [
+type Feature = { text: string; available: boolean };
+
+const plans: {
+  name: string;
+  price: string;
+  period: string;
+  description: string;
+  badge?: string;
+  isPrimary: boolean;
+  features: Feature[];
+}[] = [
   {
     name: "Ücretsiz",
     price: "₺0",
     period: "sonsuza kadar",
-    description: "Deneyimlemek için mükemmel başlangıç.",
-    cta: "Hemen Başla",
+    description: "Denemek için mükemmel başlangıç.",
     isPrimary: false,
     features: [
-      "10 mesaj / ay",
-      "Link özetleme",
-      "Sesli not transkripti",
-      "Temel semantik arama",
+      { text: "30 mesaj (toplam)", available: true },
+      { text: "5 link / ay", available: true },
+      { text: "Ses notu yok", available: false },
+      { text: "Görsel analiz yok", available: false },
+      { text: "Temel semantik arama", available: true },
     ],
-    unavailable: ["Görsel analiz", "Grup hafızası", "Öncelikli destek"],
   },
   {
-    name: "Premium",
-    price: "₺150",
+    name: "Kişisel",
+    price: "₺29",
     period: "/ ay",
-    description: "Gerçek bir ikinci beyin için sınırsız güç.",
-    cta: "WhatsApp'ta Başla",
-    isPrimary: true,
-    badge: "En Popüler",
+    description: "Günlük not tutma ve link kaydetme alışkanlığı için.",
+    isPrimary: false,
     features: [
-      "Sınırsız mesaj",
-      "Sınırsız link özetleme",
-      "Sınırsız sesli not",
-      "Görsel analiz (fatura, reçete)",
-      "Gelişmiş semantik arama",
-      "Bağlamsal sorular",
-      "Öncelikli destek",
+      { text: "150 mesaj / ay", available: true },
+      { text: "20 link / ay", available: true },
+      { text: "20 ses notu / ay", available: true },
+      { text: "Görsel analiz yok", available: false },
+      { text: "Semantik arama (5 sonuç)", available: true },
     ],
   },
-] as const;
+  {
+    name: "Profesyonel",
+    price: "₺79",
+    period: "/ ay",
+    description: "Gerçek bir ikinci beyin ihtiyacı duyanlar için.",
+    badge: "En Popüler",
+    isPrimary: true,
+    features: [
+      { text: "500 mesaj / ay", available: true },
+      { text: "200 link / ay", available: true },
+      { text: "Sınırsız ses notu", available: true },
+      { text: "Görsel analiz (fatura, reçete)", available: true },
+      { text: "Hibrit arama (8 sonuç)", available: true },
+    ],
+  },
+  {
+    name: "Sınırsız",
+    price: "₺149",
+    period: "/ ay",
+    description: "Maksimum güç, sıfır kısıt.",
+    isPrimary: false,
+    features: [
+      { text: "3000 mesaj / ay", available: true },
+      { text: "Sınırsız link", available: true },
+      { text: "Sınırsız ses notu", available: true },
+      { text: "Görsel analiz", available: true },
+      { text: "Hibrit arama (10 sonuç)", available: true },
+    ],
+  },
+];
 
 export default function PricingSection() {
   return (
     <section id="pricing" className="py-28 relative">
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#00FF9D]/20 to-transparent" />
 
-      {/* Subtle radial bg */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[#00FF9D]/2 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#00FF9D]/2 rounded-full blur-3xl" />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -75,28 +108,28 @@ export default function PricingSection() {
             Sade ve <span className="text-[#00FF9D]">Şeffaf</span>
           </h2>
           <p className="text-white/35 text-base">
-            Kredi kartı gerekmez · Dilediğin zaman iptal et
+            Tüm planlar WhatsApp üzerinden başlar · İstediğin zaman iptal et
           </p>
         </motion.div>
 
         {/* Cards */}
-        <div className="grid md:grid-cols-2 gap-5 max-w-3xl mx-auto">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {plans.map((plan, index) => (
             <motion.div
               key={plan.name}
               initial={{ opacity: 0, y: 40 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.12 }}
+              transition={{ duration: 0.5, delay: index * 0.1 }}
               whileHover={{ y: -4, transition: { duration: 0.2 } }}
-              className={`relative rounded-2xl p-7 border transition-shadow ${
+              className={`relative rounded-2xl p-6 border flex flex-col transition-shadow ${
                 plan.isPrimary
                   ? "bg-gradient-to-br from-[#0C1A10] to-[#080808] border-[#00FF9D]/28 shadow-[0_0_50px_rgba(0,255,157,0.07)]"
                   : "bg-[#0D0D0D] border-[#1A1A1A]"
               }`}
             >
               {/* Badge */}
-              {"badge" in plan && plan.badge && (
+              {plan.badge && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
                   <span className="px-4 py-1 bg-[#00FF9D] text-black text-xs font-bold rounded-full shadow-[0_0_20px_rgba(0,255,157,0.4)]">
                     {plan.badge}
@@ -106,14 +139,16 @@ export default function PricingSection() {
 
               {/* Plan info */}
               <div className="mb-5">
-                <p className="text-sm text-white/40 font-medium mb-3">{plan.name}</p>
+                <p className="text-xs text-white/40 font-medium mb-3 uppercase tracking-wider">
+                  {plan.name}
+                </p>
                 <div className="flex items-end gap-1.5 mb-1">
-                  <span className="font-heading text-5xl font-bold text-white leading-none">
+                  <span className="font-heading text-4xl font-bold text-white leading-none">
                     {plan.price}
                   </span>
                   <span className="text-white/35 text-sm pb-1">{plan.period}</span>
                 </div>
-                <p className="text-sm text-white/35 mt-2">{plan.description}</p>
+                <p className="text-xs text-white/35 mt-2 leading-relaxed">{plan.description}</p>
               </div>
 
               <div
@@ -123,36 +158,37 @@ export default function PricingSection() {
               />
 
               {/* Features */}
-              <ul className="space-y-2.5 mb-7">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-center gap-2.5">
+              <ul className="space-y-2.5 mb-7 flex-1">
+                {plan.features.map((f) => (
+                  <li key={f.text} className="flex items-center gap-2.5">
                     <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        plan.isPrimary
-                          ? "bg-[#00FF9D]/10 border border-[#00FF9D]/22"
-                          : "bg-white/5 border border-white/10"
+                      className={`w-4.5 h-4.5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        f.available
+                          ? plan.isPrimary
+                            ? "bg-[#00FF9D]/10 border border-[#00FF9D]/22"
+                            : "bg-white/5 border border-white/10"
+                          : "bg-white/3 border border-white/5"
                       }`}
                     >
-                      <Check
-                        className={`w-3 h-3 ${
-                          plan.isPrimary ? "text-[#00FF9D]" : "text-white/35"
-                        }`}
-                      />
+                      {f.available ? (
+                        <Check
+                          className={`w-2.5 h-2.5 ${
+                            plan.isPrimary ? "text-[#00FF9D]" : "text-white/40"
+                          }`}
+                        />
+                      ) : (
+                        <X className="w-2.5 h-2.5 text-white/15" />
+                      )}
                     </div>
-                    <span className="text-sm text-white/65">{feature}</span>
+                    <span
+                      className={`text-xs ${
+                        f.available ? "text-white/65" : "text-white/22"
+                      }`}
+                    >
+                      {f.text}
+                    </span>
                   </li>
                 ))}
-                {"unavailable" in plan &&
-                  plan.unavailable?.map((item) => (
-                    <li key={item} className="flex items-center gap-2.5">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 bg-white/3 border border-white/5">
-                        <span className="text-[10px] text-white/15 leading-none">
-                          ×
-                        </span>
-                      </div>
-                      <span className="text-sm text-white/22">{item}</span>
-                    </li>
-                  ))}
               </ul>
 
               {/* CTA */}
@@ -160,14 +196,14 @@ export default function PricingSection() {
                 href={WHATSAPP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-bold text-sm transition-all ${
+                className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl font-bold text-xs transition-all ${
                   plan.isPrimary
                     ? "bg-[#00FF9D] text-black hover:bg-[#00FF9D]/92 hover:shadow-[0_0_30px_rgba(0,255,157,0.35)]"
                     : "bg-white/5 text-white/60 border border-white/8 hover:bg-white/9 hover:text-white"
                 }`}
               >
-                {plan.isPrimary && <WhatsAppIcon />}
-                {plan.cta}
+                <WhatsAppIcon />
+                {plan.price === "₺0" ? "Ücretsiz Başla" : "Hemen Başla"}
               </a>
             </motion.div>
           ))}
@@ -181,8 +217,7 @@ export default function PricingSection() {
           transition={{ delay: 0.4 }}
           className="text-center text-xs text-white/20 mt-10"
         >
-          Ödeme güvenli iyzico altyapısı ile gerçekleşir. İstediğin zaman
-          iptal edebilirsin.
+          Ödeme güvenli iyzico altyapısı ile gerçekleşir · KDV dahil fiyatlardır
         </motion.p>
       </div>
     </section>

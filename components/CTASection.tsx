@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
-const WHATSAPP_URL = "https://wa.me/905xxxxxxxxx";
+const WHATSAPP_URL = "https://wa.me/15558587000";
 
 function WhatsAppIcon() {
   return (
