@@ -105,12 +105,46 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
 
   const userContext = text.replace(/https?:\/\/[^\s]+/gi, '').trim();
   const isLocationLink = /maps\.google|goo\.gl\/maps|maps\.app\.goo|yandex.*maps|waze\.com/i.test(url);
+  const isSocialMedia = /instagram\.com|tiktok\.com/i.test(url);
+
+  // Sosyal medya linkleri için önce oEmbed dene, Firecrawl'a gönderme
+  if (isSocialMedia) {
+    const socialMeta = await fetchSocialMeta(url);
+    const contextParts = [
+      socialMeta ? `Platform: ${socialMeta.platform}` : (/instagram\.com/i.test(url) ? 'Platform: Instagram' : 'Platform: TikTok'),
+      socialMeta?.author ? `Hesap: ${socialMeta.author}` : '',
+      socialMeta?.title ? `Başlık/Caption: ${socialMeta.title}` : '',
+      userContext ? `Kullanıcı notu: ${userContext}` : '',
+    ].filter(Boolean).join('\n');
+
+    const hasContent = socialMeta?.title || socialMeta?.author || userContext;
+    if (!hasContent) {
+      await sendMessage(user.whatsapp_id, '💡 Instagram içerikleri otomatik okunamıyor. Linke kısa bir açıklama ekleyerek tekrar gönder — örn:\n"[link] et yemeği tarifi"\n"[link] bu ürünü al"');
+      return;
+    }
+
+    const enriched = await withRetry(
+      () => chat(
+        `Kullanıcı bir sosyal medya içeriği paylaştı. Aşağıdaki bilgileri analiz et ve hafızaya kaydedilecek zengin bir metin oluştur.
+İçeriğin ne hakkında olduğunu, kategorisini ve anahtar kelimeleri çıkar. Türkçe yaz, 3-5 cümle.`,
+        `Link: ${url}\n${contextParts}`
+      ),
+      3, 1000
+    );
+
+    const contentToSave = `URL: ${url}\n${contextParts}\nİçerik analizi: ${enriched}`;
+    const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
+    await saveMemory(user.id, contentToSave, embedding, {
+      type: 'link', url, platform: socialMeta?.platform, saved_at: new Date().toISOString(),
+    });
+    await sendMessage(user.whatsapp_id, `✅ Kaydedildi!\n\n🧠 *Analiz:*\n${enriched}`);
+    return;
+  }
 
   let summary = '';
   let truncated = '';
 
   if (isLocationLink) {
-    // Konum linkleri scraping'e uygun değil — kullanıcı notunu kaydet
     summary = userContext || 'Konum kaydedildi.';
   } else {
     await sendMessage(user.whatsapp_id, '🔗 Link işleniyor, biraz bekle...');
@@ -121,36 +155,15 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('403') || msg.includes('do not support this site')) {
-        // oEmbed ile sosyal medya meta verisi çek (TikTok ücretsiz, Instagram Meta token ile)
-        const socialMeta = await fetchSocialMeta(url);
-
-        const contextParts = [
-          socialMeta ? `Platform: ${socialMeta.platform}` : '',
-          socialMeta?.author ? `Hesap: ${socialMeta.author}` : '',
-          socialMeta?.title ? `Başlık/Caption: ${socialMeta.title}` : '',
-          userContext ? `Kullanıcı notu: ${userContext}` : '',
-        ].filter(Boolean).join('\n');
-
-        if (!contextParts) {
-          await sendMessage(user.whatsapp_id, '💡 Bu site (Instagram, TikTok vb.) otomatik okunamıyor. Linke kısa bir açıklama ekle — örn: "et yemeği tarifi" veya "bu ürünü al". Öyle kaydederim.');
-          return;
+        if (userContext) {
+          const embedding = await withRetry(() => embed(`URL: ${url}\n${userContext}`), 3, 1000);
+          await saveMemory(user.id, `URL: ${url}\nKullanıcı notu: ${userContext}`, embedding, {
+            type: 'link', url, saved_at: new Date().toISOString(),
+          });
+          await sendMessage(user.whatsapp_id, '✅ Notun kaydedildi!');
+        } else {
+          await sendMessage(user.whatsapp_id, '❌ Bu site okunamıyor. Linke kısa bir açıklama ekleyerek tekrar gönder.');
         }
-
-        const enriched = await withRetry(
-          () => chat(
-            `Kullanıcı bir sosyal medya içeriği paylaştı. Aşağıdaki bilgileri analiz et ve hafızaya kaydedilecek zengin bir metin oluştur.
-İçeriğin ne hakkında olduğunu, kategorisini ve anahtar kelimeleri çıkar. Türkçe yaz, 3-5 cümle.`,
-            `Link: ${url}\n${contextParts}`
-          ),
-          3, 1000
-        );
-
-        const contentToSave = `URL: ${url}\n${contextParts}\nİçerik analizi: ${enriched}`;
-        const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
-        await saveMemory(user.id, contentToSave, embedding, {
-          type: 'link', url, platform: socialMeta?.platform, saved_at: new Date().toISOString(),
-        });
-        await sendMessage(user.whatsapp_id, `✅ Kaydedildi!\n\n🧠 *Analiz:*\n${enriched}`);
         return;
       }
       throw err;
