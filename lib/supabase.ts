@@ -70,7 +70,7 @@ export async function searchMemories(
   const { data, error } = await getSupabase().rpc('match_memories', {
     query_embedding: queryEmbedding,
     match_user_id: userId,
-    match_threshold: 0.5,
+    match_threshold: 0.3,
     match_count: limit,
   });
 
