@@ -1,9 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Lazy init — build sırasında değil, runtime'da oluşturulur
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+  return _supabase;
+}
 
 export interface User {
   id: string;
@@ -21,7 +28,7 @@ export interface Memory {
 
 /** Kullanıcıyı whatsapp_id ile bulur, yoksa oluşturur */
 export async function getOrCreateUser(whatsappId: string): Promise<User> {
-  const { data: existing } = await supabase
+  const { data: existing } = await getSupabase()
     .from('users')
     .select('*')
     .eq('whatsapp_id', whatsappId)
@@ -29,7 +36,7 @@ export async function getOrCreateUser(whatsappId: string): Promise<User> {
 
   if (existing) return existing as User;
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('users')
     .insert({ whatsapp_id: whatsappId })
     .select()
@@ -46,7 +53,7 @@ export async function saveMemory(
   embedding: number[],
   metadata: Record<string, unknown> = {}
 ) {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('memories')
     .insert({ user_id: userId, content, embedding, metadata });
 
@@ -59,7 +66,7 @@ export async function searchMemories(
   queryEmbedding: number[],
   limit = 5
 ): Promise<Memory[]> {
-  const { data, error } = await supabase.rpc('match_memories', {
+  const { data, error } = await getSupabase().rpc('match_memories', {
     query_embedding: queryEmbedding,
     match_user_id: userId,
     match_threshold: 0.5,
@@ -72,5 +79,5 @@ export async function searchMemories(
 
 /** Mesaj sayacını artırır */
 export async function incrementMessageCount(userId: string) {
-  await supabase.rpc('increment_message_count', { user_id_param: userId });
+  await getSupabase().rpc('increment_message_count', { user_id_param: userId });
 }
