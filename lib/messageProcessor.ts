@@ -4,8 +4,6 @@ import { sendMessage, downloadMedia } from './whatsapp';
 import { scrapeUrl } from './firecrawl';
 import { transcribeAudio } from './groq';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 const QUESTION_KEYWORDS = [
   'neydi', 'nedir', 'ne ', 'hangi', 'nerede', 'nasıl',
   'ne zaman', 'nezaman', 'kim', 'bul', 'hatırlat', 'söyle',
