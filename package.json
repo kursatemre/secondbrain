@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@mendable/firecrawl-js": "^1.4.0",
+    "@sentry/nextjs": "^10.42.0",
     "@supabase/supabase-js": "^2.45.0",
     "@upstash/redis": "^1.36.3",
     "@vercel/functions": "^3.4.3",

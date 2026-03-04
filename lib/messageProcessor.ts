@@ -7,6 +7,7 @@ import {
   recordKvkkConsent,
   requestDataDeletion,
   deleteUserData,
+  saveFailedMessage,
 } from './supabase';
 import { embed, chat, analyzeImage } from './openai-client';
 import { sendMessage, sendButtonMessage, downloadMedia } from './whatsapp';
@@ -197,6 +198,8 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
   } catch (err) {
     console.error(`[Processor] Error (${type}):`, err);
     await sendMessage(senderPhone, '⚠️ Bir hata oluştu, lütfen tekrar dene.');
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await saveFailedMessage(senderPhone, type, message.text?.body ?? '', errMsg);
   }
 }
 
@@ -322,10 +325,18 @@ async function processImage(message: WhatsAppMessage, user: UserRecord) {
 }
 
 // ─── AUDIO ──────────────────────────────────────────────────────────────────
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10 MB
+
 async function processAudio(message: WhatsAppMessage, user: UserRecord) {
   await sendMessage(user.whatsapp_id, '🎤 Ses mesajı işleniyor...');
 
-  const { buffer, mimeType } = await withRetry(() => downloadMedia((message.audio as { id: string }).id), 3, 1000);
+  const { buffer, mimeType, fileSize } = await withRetry(() => downloadMedia((message.audio as { id: string }).id), 3, 1000);
+
+  if (fileSize > MAX_AUDIO_BYTES) {
+    await sendMessage(user.whatsapp_id, `❌ Ses dosyası çok büyük (${(fileSize / 1024 / 1024).toFixed(1)} MB). Maksimum boyut 10 MB.`);
+    return;
+  }
+
   const transcript = await withRetry(() => transcribeAudio(buffer, mimeType), 3, 1000);
 
   const embedding = await withRetry(() => embed(transcript), 3, 1000);

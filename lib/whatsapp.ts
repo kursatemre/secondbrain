@@ -45,7 +45,7 @@ export async function sendButtonMessage(
 }
 
 /** WhatsApp media ID ile dosyayı indirir */
-export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string; fileSize: number }> {
   const { data: info } = await axios.get(
     `https://graph.facebook.com/v22.0/${mediaId}`,
     { headers: headers() }
@@ -56,5 +56,6 @@ export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; 
     responseType: 'arraybuffer',
   });
 
-  return { buffer: Buffer.from(data), mimeType: info.mime_type };
+  const buffer = Buffer.from(data);
+  return { buffer, mimeType: info.mime_type, fileSize: buffer.length };
 }

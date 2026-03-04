@@ -32,10 +32,10 @@ CREATE INDEX IF NOT EXISTS users_whatsapp_id_idx
 CREATE INDEX IF NOT EXISTS memories_user_id_idx
   ON memories(user_id);
 
--- Vektör benzerlik (cosine, IVFFlat)
+-- Vektör benzerlik (cosine, HNSW — IVFFlat'tan daha iyi küçük tablolarda)
 CREATE INDEX IF NOT EXISTS memories_embedding_idx
-  ON memories USING ivfflat (embedding vector_cosine_ops)
-  WITH (lists = 100);
+  ON memories USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);
 
 -- Türkçe tam metin araması
 CREATE INDEX IF NOT EXISTS memories_content_fts_idx
@@ -103,6 +103,23 @@ BEGIN
   LIMIT  match_count;
 END;
 $$;
+
+-- İşlenemeyen mesajlar (dead letter queue)
+CREATE TABLE IF NOT EXISTS failed_messages (
+  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  whatsapp_id   TEXT        NOT NULL,
+  message_type  TEXT,
+  message_body  TEXT,
+  error_message TEXT,
+  failed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  retried_at    TIMESTAMPTZ DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS failed_messages_whatsapp_id_idx
+  ON failed_messages(whatsapp_id);
+
+CREATE INDEX IF NOT EXISTS failed_messages_failed_at_idx
+  ON failed_messages(failed_at DESC);
 
 -- KVKK silme talepleri (audit log + 72h SLA takibi)
 CREATE TABLE IF NOT EXISTS deletion_requests (

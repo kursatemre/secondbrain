@@ -110,6 +110,20 @@ export async function requestDataDeletion(userId: string, whatsappId: string) {
   if (error) throw new Error(`requestDataDeletion: ${error.message}`);
 }
 
+/** İşlenemeyen mesajı dead letter queue'ya kaydeder */
+export async function saveFailedMessage(
+  whatsappId: string,
+  messageType: string,
+  messageBody: string,
+  errorMessage: string
+) {
+  // Hata kaydı başarısız olursa sessizce geç — asıl hatayı gizlemesin
+  await getSupabase()
+    .from('failed_messages')
+    .insert({ whatsapp_id: whatsappId, message_type: messageType, message_body: messageBody, error_message: errorMessage })
+    .then();
+}
+
 /** Kullanıcının tüm verilerini ve kaydını siler (hard delete) */
 export async function deleteUserData(userId: string) {
   // memories ON DELETE CASCADE ile otomatik silinir

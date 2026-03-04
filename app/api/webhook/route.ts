@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { waitUntil } from '@vercel/functions';
+import * as Sentry from '@sentry/nextjs';
 import { processMessage, WhatsAppMessage } from '@/lib/messageProcessor';
 import { checkRateLimit, RateLimitError } from '@/lib/rateLimit';
+import { sendMessage } from '@/lib/whatsapp';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,8 +86,10 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         if (err instanceof RateLimitError) {
           console.warn(`[Webhook] Rate limit: ${senderPhone} — ${err.message}`);
+          await sendMessage(senderPhone, `⏳ ${err.message} Lütfen biraz bekle.`).catch(() => {});
         } else {
           console.error('[Webhook] processMessage hatası:', err);
+          Sentry.captureException(err, { extra: { senderPhone } });
         }
       }
     })()
