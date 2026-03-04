@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { waitUntil } from '@vercel/functions';
-import { processMessage } from '@/lib/messageProcessor';
+import { processMessage, WhatsAppMessage } from '@/lib/messageProcessor';
 import { checkRateLimit, RateLimitError } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   const entry   = (body.entry as Record<string, unknown>[])?.[0];
   const change  = (entry?.changes as Record<string, unknown>[])?.[0];
   const value   = change?.value as Record<string, unknown> | undefined;
-  const messages = value?.messages as Record<string, unknown>[] | undefined;
+  const messages = value?.messages as WhatsAppMessage[] | undefined;
   const message     = messages?.[0];
   const senderPhone = message?.from as string | undefined;
 

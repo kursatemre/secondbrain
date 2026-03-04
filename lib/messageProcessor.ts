@@ -31,7 +31,7 @@ Devam etmek için *KABUL EDİYORUM* yaz.`;
 
 type MessageType = 'audio' | 'link' | 'question' | 'note';
 
-type WhatsAppMessage = {
+export type WhatsAppMessage = {
   type: string;
   text?: { body: string };
   audio?: { id: string };
