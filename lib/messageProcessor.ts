@@ -13,10 +13,18 @@ import { transcribeAudio } from './groq';
 import { withRetry } from './retry';
 
 const QUESTION_KEYWORDS = [
-  'neydi', 'nedir', 'ne ', 'hangi', 'nerede', 'nasıl',
-  'ne zaman', 'nezaman', 'kim', 'bul', 'hatırlat', 'söyle',
-  'göster', 'listele', 'kaç', 'var mı', 'attım', 'ekledim',
-  'kaydetmiştim', 'gönderdim', 'yazmıştım',
+  // soru kelimeleri
+  'neydi', 'nedir', 'ne ', 'neler', 'ne var', 'ne zaman', 'nezaman',
+  'hangi', 'nerede', 'nasıl', 'kim', 'kaç', 'var mı', 'var mi',
+  // komutlar
+  'bul', 'hatırlat', 'söyle', 'göster', 'listele', 'anlat', 'özetle', 'açıkla',
+  // geçmiş eylem sorguları
+  'attım', 'ekledim', 'kaydetmiştim', 'gönderdim', 'yazmıştım', 'söylemiştim',
+  'not almıştım', 'kayıt',
+  // plan/program sorguları
+  'programım', 'programımda', 'planım', 'planımda', 'ajanda', 'takvim',
+  'toplantım', 'randevum', 'bugün ne', 'yarın ne', 'bu hafta', 'bu ay',
+  'pazartesi', 'salı', 'çarşamba', 'perşembe', 'cuma', 'cumartesi', 'pazar',
 ];
 
 const KVKK_TEXT = `🔒 *Kişisel Verilerin Korunması Hakkında Bilgilendirme*
