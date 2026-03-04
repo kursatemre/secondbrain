@@ -99,7 +99,17 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
 
   await sendMessage(user.whatsapp_id, '🔗 Link işleniyor, biraz bekle...');
 
-  const markdown = await withRetry(() => scrapeUrl(url), 3, 1000);
+  let markdown: string;
+  try {
+    markdown = await withRetry(() => scrapeUrl(url), 2, 1000);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('403') || msg.includes('do not support this site')) {
+      await sendMessage(user.whatsapp_id, '❌ Bu site desteklenmiyor (Instagram, TikTok vb.). Makale veya web sayfası linklerini kaydedebilirsin.');
+      return;
+    }
+    throw err;
+  }
   const truncated = markdown.slice(0, 6000);
 
   const summary = await withRetry(
