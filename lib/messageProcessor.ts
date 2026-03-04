@@ -4,6 +4,8 @@ import { sendMessage, downloadMedia } from './whatsapp';
 import { scrapeUrl } from './firecrawl';
 import { transcribeAudio } from './groq';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 const QUESTION_KEYWORDS = [
   'neydi', 'nedir', 'ne ', 'hangi', 'nerede', 'nasıl',
   'ne zaman', 'nezaman', 'kim', 'bul', 'hatırlat', 'söyle',
@@ -13,7 +15,6 @@ const QUESTION_KEYWORDS = [
 
 type MessageType = 'audio' | 'link' | 'question' | 'note';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function detectMessageType(message: any): MessageType {
   if (message.type === 'audio') return 'audio';
 
@@ -26,7 +27,6 @@ function detectMessageType(message: any): MessageType {
 }
 
 /** Ana işlem yönlendirici — webhook'tan fire-and-forget olarak çağrılır */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function processMessage(message: any, senderPhone: string) {
   const user = await getOrCreateUser(senderPhone);
   await incrementMessageCount(user.id);
@@ -35,7 +35,7 @@ export async function processMessage(message: any, senderPhone: string) {
   console.log(`[Processor] ${senderPhone} → ${type}`);
 
   try {
-    if (type === 'link')     await processLink(message, user);
+    if (type === 'link')          await processLink(message, user);
     else if (type === 'audio')    await processAudio(message, user);
     else if (type === 'question') await processQuestion(message, user);
     else                          await processNote(message, user);
@@ -46,7 +46,6 @@ export async function processMessage(message: any, senderPhone: string) {
 }
 
 // ─── LINK ───────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function processLink(message: any, user: any) {
   const text: string = message.text.body;
   const url = text.match(/https?:\/\/[^\s]+/i)![0];
@@ -71,7 +70,6 @@ async function processLink(message: any, user: any) {
 }
 
 // ─── AUDIO ──────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function processAudio(message: any, user: any) {
   await sendMessage(user.whatsapp_id, '🎤 Ses mesajı işleniyor...');
 
@@ -90,7 +88,6 @@ async function processAudio(message: any, user: any) {
 }
 
 // ─── QUESTION ───────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function processQuestion(message: any, user: any) {
   const query: string = message.text.body;
   const queryEmbedding = await embed(query);
@@ -118,7 +115,6 @@ ${context}`;
 }
 
 // ─── NOTE ───────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function processNote(message: any, user: any) {
   const text: string = message.text.body;
   const embedding = await embed(text);
