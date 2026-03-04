@@ -40,7 +40,7 @@ const plans: {
   },
   {
     name: "Kişisel",
-    price: "₺29",
+    price: "₺39",
     period: "/ ay",
     description: "Günlük not tutma ve link kaydetme alışkanlığı için.",
     isPrimary: false,
@@ -54,7 +54,7 @@ const plans: {
   },
   {
     name: "Profesyonel",
-    price: "₺79",
+    price: "₺99",
     period: "/ ay",
     description: "Gerçek bir ikinci beyin ihtiyacı duyanlar için.",
     badge: "En Popüler",
@@ -69,7 +69,7 @@ const plans: {
   },
   {
     name: "Sınırsız",
-    price: "₺149",
+    price: "₺179",
     period: "/ ay",
     description: "Maksimum güç, sıfır kısıt.",
     isPrimary: false,
