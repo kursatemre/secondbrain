@@ -51,8 +51,20 @@ async function detectMessageType(message: WhatsAppMessage): Promise<MessageType>
     `Sen bir mesaj sınıflandırıcısın. Kullanıcının mesajının amacını belirle.
 Sadece tek kelime döndür: "question" veya "note"
 
-"question": Kullanıcı daha önce kaydettiği bir bilgiyi sorguluyor, hatırlatmanı istiyor veya sana bir şey soruyor.
-"note": Kullanıcı yeni bir bilgi, not, fikir veya hatırlatıcı kaydediyor.
+"question": Şunlardan biri geçerliyse:
+- Daha önce kaydedilmiş bir bilgiyi sorguluyor ("neydi", "nerede", "ne zaman", "hatırlat" vb.)
+- Geçmişte gönderdiği bir şeyi arıyor ("atmıştım", "gönderdim", "kaydetmiştim", "ekledim" vb.)
+- Hafızadan bir bilgi getirmesini istiyor ("hangi link", "o tarif", "o yer" vb.)
+- Örtük soru: sana daha önce bir şey gönderdiğini ima ediyor
+
+"note": Kullanıcı YENİ bir bilgi, not, fikir, plan veya hatırlatıcı kaydediyor. Geçmişe atıf yok.
+
+Örnekler:
+- "Bi Instagram linki atmıştım sana" → question (geçmişte gönderilen bir şeyi arıyor)
+- "Patlıcan musakka tarifi neydi" → question
+- "Cumartesi saat 15 toplantı var" → note
+- "O et yemeği tarifinin linkini bul" → question
+- "Yarın doktora gidiyorum" → note
 
 Mesaj: ${text}`,
     ''
@@ -225,16 +237,26 @@ async function processQuestion(message: WhatsAppMessage, user: UserRecord) {
     .map((m, i) => `[${i + 1}] ${m.content.slice(0, 500)}`)
     .join('\n\n---\n\n');
 
+  // Hafızadan URL'leri çıkar, cevaba ekle
+  const urls = memories
+    .map(m => {
+      const match = m.content.match(/URL:\s*(https?:\/\/[^\s\n]+)/);
+      return match ? match[1] : null;
+    })
+    .filter(Boolean);
+
   const systemPrompt = `Sen "Second Brain" adında kişisel bir AI asistanısın. \
 Kullanıcının daha önce kaydettiği notlar, linkler ve ses mesajları aşağıda verilmiştir. \
 Bu bağlamı kullanarak soruyu Türkçe, kısa ve net şekilde yanıtla. \
+Kayıtta URL varsa cevabın sonunda mutlaka göster. \
 Cevap bağlamda yoksa bunu açıkça belirt.
 
 KAYITLI HAFIZA:
 ${context}`;
 
   const answer = await withRetry(() => chat(systemPrompt, query), 3, 1000);
-  await sendMessage(user.whatsapp_id, `🧠 *Second Brain:*\n\n${answer}`);
+  const urlSuffix = urls.length > 0 ? `\n\n🔗 *Link:*\n${urls.join('\n')}` : '';
+  await sendMessage(user.whatsapp_id, `🧠 *Second Brain:*\n\n${answer}${urlSuffix}`);
 }
 
 // ─── NOTE ───────────────────────────────────────────────────────────────────
