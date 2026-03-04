@@ -151,6 +151,22 @@ export async function saveFailedMessage(
     .then();
 }
 
+/** Kullanıcının tüm hafıza kayıtlarını döner (KVKK Md. 11 veri erişimi) */
+export async function getUserMemories(userId: string): Promise<{
+  content: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}[]> {
+  const { data, error } = await getSupabase()
+    .from('memories')
+    .select('content, metadata, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`getUserMemories: ${error.message}`);
+  return (data ?? []) as { content: string; metadata: Record<string, unknown>; created_at: string }[];
+}
+
 /** Kullanıcının tüm verilerini ve kaydını siler (hard delete) */
 export async function deleteUserData(userId: string) {
   // memories ON DELETE CASCADE ile otomatik silinir

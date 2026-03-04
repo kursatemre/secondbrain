@@ -9,6 +9,7 @@ import {
   requestDataDeletion,
   deleteUserData,
   saveFailedMessage,
+  getUserMemories,
 } from './supabase';
 import { embed, chat, analyzeImage } from './openai-client';
 import { sendMessage, sendButtonMessage, downloadMedia } from './whatsapp';
@@ -160,8 +161,14 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
 
   const text = message.text?.body?.trim() ?? '';
 
-  // ─── Veri silme talebi ───────────────────────────────────────────────────
+  // ─── Veri indirme talebi (KVKK Md. 11) ─────────────────────────────────
   const textLower = text.toLowerCase();
+  if (textLower.includes('verilerimi indir')) {
+    await exportUserData(user, senderPhone);
+    return;
+  }
+
+  // ─── Veri silme talebi ───────────────────────────────────────────────────
   if (textLower.includes('verilerimi sil')) {
     await requestDataDeletion(user.id, senderPhone);
     await sendButtonMessage(senderPhone, DELETE_CONFIRM_TEXT, [
@@ -197,6 +204,10 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
     );
     return;
   }
+
+  // %80 eşiğini tam ilk geçişte bir kez uyar
+  const threshold80 = Math.ceil(msgUsage.limit * 0.8);
+  const sendQuotaWarning = msgUsage.count === threshold80;
   // ────────────────────────────────────────────────────────────────────────
 
   const type = await detectMessageType(message);
@@ -208,6 +219,18 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
     else if (type === 'image')    await processImage(message, user);
     else if (type === 'question') await processQuestion(message, user);
     else                          await processNote(message, user);
+
+    // Ana yanıttan sonra %80 kota uyarısı gönder (bir kez)
+    if (sendQuotaWarning) {
+      const remaining = msgUsage.limit - msgUsage.count;
+      const periodText = user.plan === 'free' ? 'toplam' : 'bu ay';
+      await sendMessage(
+        senderPhone,
+        `⚠️ *Kota Uyarısı:* ${periodText} kullanabileceğin mesaj hakkının %80'ini doldurdun.\n\n` +
+        `Kalan: *${remaining} mesaj*\n\n` +
+        `Limitini artırmak için: secondbrain.com.tr`
+      ).catch(() => {});
+    }
   } catch (err) {
     console.error(`[Processor] Error (${type}):`, err);
     await sendMessage(senderPhone, '⚠️ Bir hata oluştu, lütfen tekrar dene.');
@@ -436,4 +459,52 @@ async function processNote(message: WhatsAppMessage, user: UserRecord) {
     type: 'note', saved_at: new Date().toISOString(),
   });
   await sendMessage(user.whatsapp_id, '✅ Not kaydedildi!');
+}
+
+// ─── VERİ İNDİRME (KVKK Md. 11) ────────────────────────────────────────────
+const EXPORT_PREVIEW_LIMIT = 15;
+
+async function exportUserData(user: UserRecord, senderPhone: string) {
+  const memories = await getUserMemories(user.id);
+
+  if (memories.length === 0) {
+    await sendMessage(senderPhone, '📂 Henüz kayıtlı verin yok.');
+    return;
+  }
+
+  // Tip bazlı sayım
+  const counts = memories.reduce<Record<string, number>>((acc, m) => {
+    const t = (m.metadata?.type as string) ?? 'other';
+    acc[t] = (acc[t] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const countLines = Object.entries(counts)
+    .map(([t, n]) => `  • ${t}: ${n}`)
+    .join('\n');
+
+  const header =
+    `📦 *Second Brain — Veri Dışa Aktarımı*\n\n` +
+    `Toplam kayıt: *${memories.length}*\n${countLines}\n\n` +
+    `Plan: *${user.plan}*\n\n` +
+    (memories.length > EXPORT_PREVIEW_LIMIT
+      ? `İlk ${EXPORT_PREVIEW_LIMIT} kayıt aşağıda. ` +
+        `Tümü için destek@secondbrain.com.tr adresine yaz.\n\n`
+      : '') +
+    `─────────────────────`;
+
+  await sendMessage(senderPhone, header);
+
+  // Her kaydı ayrı mesaj olarak gönder (4096 char sınırı)
+  const preview = memories.slice(0, EXPORT_PREVIEW_LIMIT);
+  for (let i = 0; i < preview.length; i++) {
+    const mem = preview[i];
+    const date = new Date(mem.created_at).toLocaleDateString('tr-TR');
+    const typeLabel = (mem.metadata?.type as string) ?? 'kayıt';
+    const body = mem.content.slice(0, 800) + (mem.content.length > 800 ? '…' : '');
+    await sendMessage(
+      senderPhone,
+      `[${i + 1}/${Math.min(memories.length, EXPORT_PREVIEW_LIMIT)}] *${typeLabel}* · ${date}\n\n${body}`
+    );
+  }
 }
