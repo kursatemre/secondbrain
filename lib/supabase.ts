@@ -17,6 +17,7 @@ export interface User {
   whatsapp_id: string;
   plan: 'free' | 'premium';
   message_count: number;
+  kvkk_accepted_at: string | null;
 }
 
 export interface Memory {
@@ -80,4 +81,23 @@ export async function searchMemories(
 /** Mesaj sayacını artırır */
 export async function incrementMessageCount(userId: string) {
   await getSupabase().rpc('increment_message_count', { user_id_param: userId });
+}
+
+/** Kullanıcının KVKK onayı verip vermediğini kontrol eder */
+export async function hasAcceptedKvkk(userId: string): Promise<boolean> {
+  const { data } = await getSupabase()
+    .from('users')
+    .select('kvkk_accepted_at')
+    .eq('id', userId)
+    .single();
+  return !!(data as { kvkk_accepted_at: string | null } | null)?.kvkk_accepted_at;
+}
+
+/** KVKK onay tarihini kaydeder */
+export async function recordKvkkConsent(userId: string) {
+  const { error } = await getSupabase()
+    .from('users')
+    .update({ kvkk_accepted_at: new Date().toISOString() })
+    .eq('id', userId);
+  if (error) throw new Error(`recordKvkkConsent: ${error.message}`);
 }

@@ -7,12 +7,13 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ── TABLES ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  whatsapp_id   TEXT        UNIQUE NOT NULL,
-  plan          TEXT        DEFAULT 'free' CHECK (plan IN ('free', 'premium')),
-  message_count INTEGER     DEFAULT 0,
-  created_at    TIMESTAMPTZ DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
+  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  whatsapp_id       TEXT        UNIQUE NOT NULL,
+  plan              TEXT        DEFAULT 'free' CHECK (plan IN ('free', 'premium')),
+  message_count     INTEGER     DEFAULT 0,
+  kvkk_accepted_at  TIMESTAMPTZ DEFAULT NULL,
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS memories (
@@ -39,6 +40,43 @@ CREATE INDEX IF NOT EXISTS memories_embedding_idx
 -- Türkçe tam metin araması
 CREATE INDEX IF NOT EXISTS memories_content_fts_idx
   ON memories USING gin(to_tsvector('turkish', content));
+
+-- ── ROW LEVEL SECURITY ──────────────────────────────────────
+-- Service role key tüm satırlara erişebilir (backend için).
+-- Authenticated users (varsa) sadece kendi verisine erişir.
+
+ALTER TABLE users    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memories ENABLE ROW LEVEL SECURITY;
+
+-- Service role bypass (Supabase built-in, ek policy gerekmez)
+-- Aşağıdaki policies gelecekte Supabase Auth entegrasyonu için hazır bırakılmıştır.
+
+-- users: herkes kendi satırını okuyabilir / güncelleyebilir
+DROP POLICY IF EXISTS "users_self_select" ON users;
+CREATE POLICY "users_self_select"
+  ON users FOR SELECT
+  USING (auth.uid()::text = whatsapp_id);
+
+DROP POLICY IF EXISTS "users_self_update" ON users;
+CREATE POLICY "users_self_update"
+  ON users FOR UPDATE
+  USING (auth.uid()::text = whatsapp_id);
+
+-- memories: herkes kendi anılarını okuyabilir / ekleyebilir / silebilir
+DROP POLICY IF EXISTS "memories_owner_select" ON memories;
+CREATE POLICY "memories_owner_select"
+  ON memories FOR SELECT
+  USING (user_id IN (SELECT id FROM users WHERE whatsapp_id = auth.uid()::text));
+
+DROP POLICY IF EXISTS "memories_owner_insert" ON memories;
+CREATE POLICY "memories_owner_insert"
+  ON memories FOR INSERT
+  WITH CHECK (user_id IN (SELECT id FROM users WHERE whatsapp_id = auth.uid()::text));
+
+DROP POLICY IF EXISTS "memories_owner_delete" ON memories;
+CREATE POLICY "memories_owner_delete"
+  ON memories FOR DELETE
+  USING (user_id IN (SELECT id FROM users WHERE whatsapp_id = auth.uid()::text));
 
 -- ── FUNCTIONS ───────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION match_memories(

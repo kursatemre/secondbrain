@@ -1,8 +1,16 @@
-import { getOrCreateUser, saveMemory, searchMemories, incrementMessageCount } from './supabase';
+import {
+  getOrCreateUser,
+  saveMemory,
+  searchMemories,
+  incrementMessageCount,
+  hasAcceptedKvkk,
+  recordKvkkConsent,
+} from './supabase';
 import { embed, chat } from './openai-client';
 import { sendMessage, downloadMedia } from './whatsapp';
 import { scrapeUrl } from './firecrawl';
 import { transcribeAudio } from './groq';
+import { withRetry } from './retry';
 
 const QUESTION_KEYWORDS = [
   'neydi', 'nedir', 'ne ', 'hangi', 'nerede', 'nasıl',
@@ -11,9 +19,33 @@ const QUESTION_KEYWORDS = [
   'kaydetmiştim', 'gönderdim', 'yazmıştım',
 ];
 
+const KVKK_TEXT = `🔒 *Kişisel Verilerin Korunması Hakkında Bilgilendirme*
+
+Second Brain, sana daha iyi hizmet sunabilmek için WhatsApp mesajlarını (metin, ses, link) işler ve şifreli olarak saklar.
+
+• Veriler yalnızca senin sorularına cevap vermek için kullanılır
+• Üçüncü taraflarla paylaşılmaz
+• İstediğin zaman silinmesini talep edebilirsin (KVKK Madde 11)
+
+Devam etmek için *KABUL EDİYORUM* yaz.`;
+
 type MessageType = 'audio' | 'link' | 'question' | 'note';
 
-function detectMessageType(message: any): MessageType {
+type WhatsAppMessage = {
+  type: string;
+  text?: { body: string };
+  audio?: { id: string };
+  [key: string]: unknown;
+};
+
+type UserRecord = {
+  id: string;
+  whatsapp_id: string;
+  plan: 'free' | 'premium';
+  message_count: number;
+};
+
+function detectMessageType(message: WhatsAppMessage): MessageType {
   if (message.type === 'audio') return 'audio';
 
   const text: string = message.text?.body ?? '';
@@ -25,8 +57,25 @@ function detectMessageType(message: any): MessageType {
 }
 
 /** Ana işlem yönlendirici — webhook'tan fire-and-forget olarak çağrılır */
-export async function processMessage(message: any, senderPhone: string) {
+export async function processMessage(message: WhatsAppMessage, senderPhone: string) {
   const user = await getOrCreateUser(senderPhone);
+
+  // ─── KVKK onay kontrolü ─────────────────────────────────────────────────
+  const text = message.text?.body?.trim() ?? '';
+
+  if (text.toUpperCase() === 'KABUL EDİYORUM') {
+    await recordKvkkConsent(user.id);
+    await sendMessage(senderPhone, '✅ Onayın alındı! Artık Second Brain\'i kullanabilirsin. Bir not, link veya ses mesajı gönder.');
+    return;
+  }
+
+  const accepted = await hasAcceptedKvkk(user.id);
+  if (!accepted) {
+    await sendMessage(senderPhone, KVKK_TEXT);
+    return;
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   await incrementMessageCount(user.id);
 
   const type = detectMessageType(message);
@@ -44,22 +93,25 @@ export async function processMessage(message: any, senderPhone: string) {
 }
 
 // ─── LINK ───────────────────────────────────────────────────────────────────
-async function processLink(message: any, user: any) {
-  const text: string = message.text.body;
+async function processLink(message: WhatsAppMessage, user: UserRecord) {
+  const text: string = message.text!.body;
   const url = text.match(/https?:\/\/[^\s]+/i)![0];
 
   await sendMessage(user.whatsapp_id, '🔗 Link işleniyor, biraz bekle...');
 
-  const markdown = await scrapeUrl(url);
+  const markdown = await withRetry(() => scrapeUrl(url), 3, 1000);
   const truncated = markdown.slice(0, 6000);
 
-  const summary = await chat(
-    'Sen bir içerik özetleyicisisin. Verilen makaleyi Türkçe olarak 3-5 cümleyle özetle. Başlık ve ana fikirler dahil olsun.',
-    truncated
+  const summary = await withRetry(
+    () => chat(
+      'Sen bir içerik özetleyicisisin. Verilen makaleyi Türkçe olarak 3-5 cümleyle özetle. Başlık ve ana fikirler dahil olsun.',
+      truncated
+    ),
+    3, 1000
   );
 
   const contentToSave = `URL: ${url}\nÖzet: ${summary}\n\nTam içerik:\n${truncated}`;
-  const embedding = await embed(contentToSave);
+  const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
   await saveMemory(user.id, contentToSave, embedding, {
     type: 'link', url, saved_at: new Date().toISOString(),
   });
@@ -68,13 +120,13 @@ async function processLink(message: any, user: any) {
 }
 
 // ─── AUDIO ──────────────────────────────────────────────────────────────────
-async function processAudio(message: any, user: any) {
+async function processAudio(message: WhatsAppMessage, user: UserRecord) {
   await sendMessage(user.whatsapp_id, '🎤 Ses mesajı işleniyor...');
 
-  const { buffer, mimeType } = await downloadMedia(message.audio.id);
-  const transcript = await transcribeAudio(buffer, mimeType);
+  const { buffer, mimeType } = await withRetry(() => downloadMedia((message.audio as { id: string }).id), 3, 1000);
+  const transcript = await withRetry(() => transcribeAudio(buffer, mimeType), 3, 1000);
 
-  const embedding = await embed(transcript);
+  const embedding = await withRetry(() => embed(transcript), 3, 1000);
   await saveMemory(user.id, transcript, embedding, {
     type: 'audio', saved_at: new Date().toISOString(),
   });
@@ -86,9 +138,9 @@ async function processAudio(message: any, user: any) {
 }
 
 // ─── QUESTION ───────────────────────────────────────────────────────────────
-async function processQuestion(message: any, user: any) {
-  const query: string = message.text.body;
-  const queryEmbedding = await embed(query);
+async function processQuestion(message: WhatsAppMessage, user: UserRecord) {
+  const query: string = message.text!.body;
+  const queryEmbedding = await withRetry(() => embed(query), 3, 1000);
   const memories = await searchMemories(user.id, queryEmbedding, 5);
 
   if (memories.length === 0) {
@@ -108,14 +160,14 @@ Cevap bağlamda yoksa bunu açıkça belirt.
 KAYITLI HAFIZA:
 ${context}`;
 
-  const answer = await chat(systemPrompt, query);
+  const answer = await withRetry(() => chat(systemPrompt, query), 3, 1000);
   await sendMessage(user.whatsapp_id, `🧠 *Second Brain:*\n\n${answer}`);
 }
 
 // ─── NOTE ───────────────────────────────────────────────────────────────────
-async function processNote(message: any, user: any) {
-  const text: string = message.text.body;
-  const embedding = await embed(text);
+async function processNote(message: WhatsAppMessage, user: UserRecord) {
+  const text: string = message.text!.body;
+  const embedding = await withRetry(() => embed(text), 3, 1000);
   await saveMemory(user.id, text, embedding, {
     type: 'note', saved_at: new Date().toISOString(),
   });

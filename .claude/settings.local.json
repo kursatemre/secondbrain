@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install @vercel/kv --save)",
+      "Bash(npm install @vercel/kv)",
+      "Bash(node -e \"require\\(''@vercel/kv''\\); console.log\\(''ok''\\)\")",
+      "Bash(npm run build)",
+      "Bash(npm install ioredis)",
+      "WebFetch(domain:orionsoft.dev)",
+      "Bash(npm install @upstash/redis)",
+      "Bash(npm install @vercel/functions)"
+    ]
+  }
+}
