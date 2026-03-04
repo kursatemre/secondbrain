@@ -9,6 +9,7 @@ import {
 import { embed, chat } from './openai-client';
 import { sendMessage, downloadMedia } from './whatsapp';
 import { scrapeUrl } from './firecrawl';
+import { fetchSocialMeta } from './socialMedia';
 import { transcribeAudio } from './groq';
 import { withRetry } from './retry';
 
@@ -120,27 +121,36 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('403') || msg.includes('do not support this site')) {
-        if (userContext) {
-          // Kullanıcının açıklamasını GPT ile zenginleştir
-          const enriched = await withRetry(
-            () => chat(
-              `Kullanıcı bir sosyal medya linki (Instagram/TikTok vb.) paylaştı ve kısa bir açıklama yazdı.
-Bu açıklamayı analiz ederek hafızaya kaydedilecek zengin bir metin oluştur.
-İçeriğin ne hakkında olduğunu, kategorisini, anahtar kelimeleri ve önemli detayları çıkar.
-Türkçe yaz, 3-5 cümle.`,
-              `Link: ${url}\nKullanıcı notu: ${userContext}`
-            ),
-            3, 1000
-          );
-          const contentToSave = `URL: ${url}\nKullanıcı notu: ${userContext}\nİçerik analizi: ${enriched}`;
-          const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
-          await saveMemory(user.id, contentToSave, embedding, {
-            type: 'link', url, saved_at: new Date().toISOString(),
-          });
-          await sendMessage(user.whatsapp_id, `✅ Kaydedildi!\n\n🧠 *Analiz:*\n${enriched}`);
-        } else {
-          await sendMessage(user.whatsapp_id, '💡 Bu site (Instagram, TikTok vb.) otomatik okunamıyor. Linke ek olarak kısa bir açıklama yaz — örn: "et yemeği tarifi" veya "bu ürünü al". Öyle kaydederim.');
+        // oEmbed ile sosyal medya meta verisi çek (TikTok ücretsiz, Instagram Meta token ile)
+        const socialMeta = await fetchSocialMeta(url);
+
+        const contextParts = [
+          socialMeta ? `Platform: ${socialMeta.platform}` : '',
+          socialMeta?.author ? `Hesap: ${socialMeta.author}` : '',
+          socialMeta?.title ? `Başlık/Caption: ${socialMeta.title}` : '',
+          userContext ? `Kullanıcı notu: ${userContext}` : '',
+        ].filter(Boolean).join('\n');
+
+        if (!contextParts) {
+          await sendMessage(user.whatsapp_id, '💡 Bu site (Instagram, TikTok vb.) otomatik okunamıyor. Linke kısa bir açıklama ekle — örn: "et yemeği tarifi" veya "bu ürünü al". Öyle kaydederim.');
+          return;
         }
+
+        const enriched = await withRetry(
+          () => chat(
+            `Kullanıcı bir sosyal medya içeriği paylaştı. Aşağıdaki bilgileri analiz et ve hafızaya kaydedilecek zengin bir metin oluştur.
+İçeriğin ne hakkında olduğunu, kategorisini ve anahtar kelimeleri çıkar. Türkçe yaz, 3-5 cümle.`,
+            `Link: ${url}\n${contextParts}`
+          ),
+          3, 1000
+        );
+
+        const contentToSave = `URL: ${url}\n${contextParts}\nİçerik analizi: ${enriched}`;
+        const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
+        await saveMemory(user.id, contentToSave, embedding, {
+          type: 'link', url, platform: socialMeta?.platform, saved_at: new Date().toISOString(),
+        });
+        await sendMessage(user.whatsapp_id, `✅ Kaydedildi!\n\n🧠 *Analiz:*\n${enriched}`);
         return;
       }
       throw err;
