@@ -12,20 +12,6 @@ import { scrapeUrl } from './firecrawl';
 import { transcribeAudio } from './groq';
 import { withRetry } from './retry';
 
-const QUESTION_KEYWORDS = [
-  // soru kelimeleri
-  'neydi', 'nedir', 'ne ', 'neler', 'ne var', 'ne zaman', 'nezaman',
-  'hangi', 'nerede', 'nasıl', 'kim', 'kaç', 'var mı', 'var mi',
-  // komutlar
-  'bul', 'hatırlat', 'söyle', 'göster', 'listele', 'anlat', 'özetle', 'açıkla',
-  // geçmiş eylem sorguları
-  'attım', 'ekledim', 'kaydetmiştim', 'gönderdim', 'yazmıştım', 'söylemiştim',
-  'not almıştım', 'kayıt',
-  // plan/program sorguları
-  'programım', 'programımda', 'planım', 'planımda', 'ajanda', 'takvim',
-  'toplantım', 'randevum', 'bugün ne', 'yarın ne', 'bu hafta', 'bu ay',
-  'pazartesi', 'salı', 'çarşamba', 'perşembe', 'cuma', 'cumartesi', 'pazar',
-];
 
 const KVKK_TEXT = `🔒 *Kişisel Verilerin Korunması Hakkında Bilgilendirme*
 
@@ -53,15 +39,26 @@ type UserRecord = {
   message_count: number;
 };
 
-function detectMessageType(message: WhatsAppMessage): MessageType {
+async function detectMessageType(message: WhatsAppMessage): Promise<MessageType> {
   if (message.type === 'audio') return 'audio';
 
   const text: string = message.text?.body ?? '';
   if (/https?:\/\/[^\s]+/i.test(text)) return 'link';
-  if (text.includes('?') || QUESTION_KEYWORDS.some((kw) => text.toLowerCase().includes(kw))) {
-    return 'question';
-  }
-  return 'note';
+
+  // GPT ile intent sınıflandırma
+  const result = await chat(
+    `Sen bir mesaj sınıflandırıcısın. Kullanıcının mesajının amacını belirle.
+Sadece tek kelime döndür: "question" veya "note"
+
+"question": Kullanıcı daha önce kaydettiği bir bilgiyi sorguluyor, hatırlatmanı istiyor veya sana bir şey soruyor.
+"note": Kullanıcı yeni bir bilgi, not, fikir veya hatırlatıcı kaydediyor.
+
+Mesaj: ${text}`,
+    ''
+  );
+
+  const intent = result.trim().toLowerCase();
+  return intent === 'question' ? 'question' : 'note';
 }
 
 /** Ana işlem yönlendirici — webhook'tan fire-and-forget olarak çağrılır */
@@ -86,7 +83,7 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
 
   await incrementMessageCount(user.id);
 
-  const type = detectMessageType(message);
+  const type = await detectMessageType(message);
   console.log(`[Processor] ${senderPhone} → ${type}`);
 
   try {
