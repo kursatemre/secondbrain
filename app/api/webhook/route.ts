@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
 
   if (!['text', 'audio', 'image', 'interactive'].includes(message.type as string)) {
     console.log(`[Webhook] Desteklenmeyen tip: ${message.type}`);
+    waitUntil(sendMessage(senderPhone, '❌ Bu içerik tipi desteklenmiyor.\n\nGönderebileceklerin: metin, ses notu, görsel veya link.').catch(() => {}));
     return new Response('OK', { status: 200 });
   }
 
