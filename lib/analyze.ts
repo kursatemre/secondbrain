@@ -6,7 +6,7 @@
 import { chat } from './openai-client';
 
 export interface AnalysisResult {
-  intent: 'task' | 'note' | 'query' | 'reminder';
+  intent: 'task' | 'note' | 'query' | 'reminder' | 'chat';
   due_date: string | null;          // ISO 8601 veya null
   time_expression: string | null;   // "yarın", "Cuma 14:00" vb.
   tags: string[];                   // ["iş", "finans"] vb.
@@ -74,8 +74,9 @@ export async function analyzeMessage(
     `}\n\n` +
     `Kurallar:\n` +
     `- intent=task: yapılacak bir iş/eylem/görev içeriyor\n` +
-    `- intent=note: bilgi notu, referans, kayıt\n` +
-    `- intent=query: geçmiş kayıtlara soru soruluyor\n` +
+    `- intent=note: bilgi notu, referans, kayıt (hafızaya kaydedilecek)\n` +
+    `- intent=query: geçmiş kayıtlara soru soruluyor ("ne kaydetmiştim", "hangi linki atmıştım" vb.)\n` +
+    `- intent=chat: genel sohbet, genel bilgi sorusu, selamlama (saat kaç, hava nasıl, merhaba, nasılsın, teşekkür, vb.) — hafızaya kaydedilmez\n` +
     `- intent=reminder: "hatırlat" kelimesi geçiyor\n` +
     `- is_task_completion: "bitti","aldım","yaptım","tamam","tamamladım","gittim" vb. içeriyorsa true\n` +
     `- tags: 1-3 etiket, havuzdan seç. Kullanıcı belirtmişse onu kullan.\n` +

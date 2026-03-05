@@ -324,6 +324,8 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
         await processReminder(cleanText || text, analysis, user, senderPhone);
       } else if (analysis.intent === 'query') {
         await processQuestion(message, user, profileStr, userPlan);
+      } else if (analysis.intent === 'chat') {
+        await processChat(text, profileStr, senderPhone);
       } else {
         // task veya note — her ikisi de saveNote'a gider
         await processNote(cleanText || text, analysis, user);
@@ -793,6 +795,20 @@ async function processAudio(message: WhatsAppMessage, user: UserRecord): Promise
     user.whatsapp_id,
     `✅ Ses notu kaydedildi!\n\n📝 *Transkript:*\n${transcript.slice(0, 600)}${transcript.length > 600 ? '…' : ''}`
   );
+}
+
+// ─── GENEL SOHBET ─────────────────────────────────────────────────────────────
+
+async function processChat(text: string, profileStr: string, senderPhone: string): Promise<void> {
+  const today = getTodayStr();
+  const profileCtx = profileStr ? `\nKullanıcı: ${profileStr}` : '';
+  const systemPrompt =
+    `Sen "Second Brain" kişisel AI asistanısın. Bugün: ${today}.${profileCtx}\n` +
+    `Kullanıcıyla Türkçe, samimi ve kısa sohbet et. ` +
+    `Saat/tarih sorularını doğrudan cevapla. Kayıt veya hafıza araması yapma.`;
+
+  const answer = await withRetry(() => chat(systemPrompt, text), 3, 1000);
+  await sendMessage(senderPhone, `🤖 ${answer}`);
 }
 
 // ─── QUESTION ─────────────────────────────────────────────────────────────────
