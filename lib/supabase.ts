@@ -114,7 +114,11 @@ export async function searchMemoriesHybrid(
     match_count: limit,
   });
 
-  if (error) throw new Error(`searchMemoriesHybrid: ${error.message}`);
+  // Fonksiyon henüz kurulmadıysa semantic aramaya fall back et
+  if (error) {
+    console.warn('[searchMemoriesHybrid] Hibrit arama başarısız, semantic aramaya geçiliyor:', error.message);
+    return searchMemories(userId, queryEmbedding, limit);
+  }
   return (data as Memory[]) || [];
 }
 
