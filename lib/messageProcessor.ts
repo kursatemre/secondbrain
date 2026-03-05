@@ -186,7 +186,7 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
 
       // 2. Trial bilgilendirme
       const trialEnd = user.trial_ends_at
-        ? new Date(user.trial_ends_at).toLocaleDateString('tr-TR')
+        ? new Date(user.trial_ends_at).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })
         : null;
       const trialMsg = trialEnd
         ? `🎁 *15 Günlük Ücretsiz Deneme Başladı!*\n\n` +
@@ -420,7 +420,7 @@ async function handleSpecialCommand(
       await sendMessage(senderPhone, '⏰ Aktif hatırlatıcın yok.');
     } else {
       const lines = reminders.map((r, i) => {
-        const dt = new Date(r.remind_at).toLocaleString('tr-TR');
+        const dt = new Date(r.remind_at).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
         const rec = r.is_recurring ? ` (${r.recurrence_rule})` : '';
         return `${i + 1}. ${r.message.slice(0, 80)}${rec} · 📅 ${dt}`;
       });
@@ -562,7 +562,7 @@ async function processReminder(
     analysis.recurrence_rule
   );
 
-  const dt = new Date(analysis.remind_at).toLocaleString('tr-TR');
+  const dt = new Date(analysis.remind_at).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
   const recStr = analysis.recurrence_rule ? ` (tekrarlı: ${analysis.recurrence_rule})` : '';
   await sendMessage(
     senderPhone,
@@ -607,7 +607,7 @@ async function processNote(
 
   if (analysis.intent === 'task') {
     const dueStr = analysis.due_date
-      ? ` 📅 ${new Date(analysis.due_date).toLocaleDateString('tr-TR')}`
+      ? ` 📅 ${new Date(analysis.due_date).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}`
       : '';
     const tagStr = analysis.tags.length > 0 ? ` [${analysis.tags.join(', ')}]` : '';
     await sendMessage(user.whatsapp_id, `✅ *Görev kaydedildi:* ${text.slice(0, 100)}${dueStr}${tagStr}`);
@@ -898,7 +898,7 @@ async function exportUserData(user: UserRecord, senderPhone: string) {
   const preview = memories.slice(0, EXPORT_PREVIEW_LIMIT);
   for (let i = 0; i < preview.length; i++) {
     const mem = preview[i];
-    const date = new Date(mem.created_at).toLocaleDateString('tr-TR');
+    const date = new Date(mem.created_at).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' });
     const typeLabel = (mem.metadata?.type as string) ?? 'kayıt';
     const body = mem.content.slice(0, 800) + (mem.content.length > 800 ? '…' : '');
     await sendMessage(
