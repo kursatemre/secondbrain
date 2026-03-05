@@ -10,6 +10,28 @@ import {
   deleteUserData,
   saveFailedMessage,
   getUserMemories,
+  // Görev
+  getPendingTasks,
+  getTodayTasks,
+  getOverdueTasks,
+  getRecentlyCompletedTasks,
+  updateTaskStatus,
+  getWeeklyTaskStats,
+  // Proaktif
+  getUserState,
+  updateUserState,
+  // Profil
+  getUserProfile,
+  updateUserProfile,
+  getRecentMemoryContents,
+  // Hatırlatıcı
+  createReminder,
+  getActiveReminders,
+  // Bağlantılar
+  findSimilarMemories,
+  saveMemoryConnection,
+  // Sayı
+  getTotalMemoryCount,
 } from './supabase';
 import { embed, chat, analyzeImage } from './openai-client';
 import { sendMessage, sendButtonMessage, downloadMedia } from './whatsapp';
@@ -17,6 +39,23 @@ import { scrapeUrl } from './firecrawl';
 import { fetchSocialMeta } from './socialMedia';
 import { transcribeAudio } from './groq';
 import { withRetry } from './retry';
+import {
+  analyzeMessage,
+  extractHashtags,
+  getTodayStr,
+  summarizeTranscript,
+  matchPendingTask,
+} from './analyze';
+import { formatTaskList, overdueWarningLine } from './tasks';
+import {
+  buildMorningBriefing as buildBriefing,
+  buildWeeklyReport as buildReport,
+  generateUserProfile,
+  formatProfileForPrompt,
+} from './proactive';
+
+// Re-export from proactive since tasks.ts exports these too
+export { formatTaskList } from './tasks';
 
 // ─── MESAJLAR ────────────────────────────────────────────────────────────────
 
@@ -28,11 +67,11 @@ Ben senin kişisel AI hafızan. WhatsApp üzerinden her şeyi kaydeder, istediğ
 
 📝 *Not* — "Yarın saat 15 toplantı var"
 🔗 *Link* — URL at, özetleyip saklarım
-🎤 *Ses notu* — Sesli mesaj gönder, yazıya çevirip kaklarım
+🎤 *Ses notu* — Sesli mesaj gönder, yazıya çevirip kaydederim
 🖼️ *Görsel* — Fotoğraf at, analiz edip saklarım
 
 *Sonra istediğini sor:*
-"O toplantı ne zamandı?" · "Pasta tarifini bul" · "Hangi linki atmıştım?"
+"O toplantı ne zamandı?" · "Pasta tarifini bul" · "Bugün ne yapacağım?"
 
 Devam etmek için önce gizlilik onayı gerekiyor 👇`;
 
@@ -50,7 +89,7 @@ const KVKK_TEXT = `🔒 *Gizlilik ve Veri Koruma Bildirimi*
 
 *Saklama Süresi:* Hesabınız aktif olduğu süre boyunca
 
-*Veri Aktarımı:* İçerikleriniz AI işleme amacıyla OpenAI ve Groq altyapısı üzerinden şifreli olarak iletilir. Üçüncü taraflarla paylaşılmaz, reklam amacıyla kullanılmaz.
+*Veri Aktarımı:* İçerikleriniz AI işleme amacıyla OpenAI ve Groq altyapısı üzerinden şifreli olarak iletilir. Üçüncü taraflarla paylaşılmaz.
 
 *Haklarınız (KVKK Md. 11 · GDPR Art. 17):*
 • Verilerinize erişme ve düzeltme talep etme
@@ -66,8 +105,6 @@ Tüm notların, linkler, ses ve görsel analizlerin kalıcı olarak silinecek.
 Bu işlem *geri alınamaz.*`;
 
 // ─── TIPLER ──────────────────────────────────────────────────────────────────
-
-type MessageType = 'audio' | 'image' | 'link' | 'question' | 'note';
 
 export type WhatsAppMessage = {
   type: string;
@@ -87,45 +124,16 @@ type UserRecord = {
   message_count: number;
 };
 
-// ─── INTENT DETECTION ────────────────────────────────────────────────────────
-
-async function detectMessageType(message: WhatsAppMessage): Promise<MessageType> {
-  if (message.type === 'audio') return 'audio';
-  if (message.type === 'image') return 'image';
-
-  const text: string = message.text?.body ?? '';
-  if (/https?:\/\/[^\s]+/i.test(text)) return 'link';
-
-  const result = await chat(
-    `Sen bir mesaj sınıflandırıcısın. Kullanıcının mesajının amacını belirle.
-Sadece tek kelime döndür: "question" veya "note"
-
-"question": Şunlardan biri geçerliyse:
-- Daha önce kaydedilmiş bir bilgiyi sorguluyor ("neydi", "nerede", "ne zaman", "hatırlat" vb.)
-- Geçmişte gönderdiği bir şeyi arıyor ("atmıştım", "gönderdim", "kaydetmiştim", "ekledim" vb.)
-- Hafızadan bir bilgi getirmesini istiyor ("hangi link", "o tarif", "o yer" vb.)
-- Örtük soru: sana daha önce bir şey gönderdiğini ima ediyor
-
-"note": Kullanıcı YENİ bir bilgi, not, fikir, plan veya hatırlatıcı kaydediyor. Geçmişe atıf yok.
-
-Örnekler:
-- "Bi Instagram linki atmıştım sana" → question
-- "Patlıcan musakka tarifi neydi" → question
-- "Cumartesi saat 15 toplantı var" → note
-- "O et yemeği tarifinin linkini bul" → question
-- "Yarın doktora gidiyorum" → note
-
-Mesaj: ${text}`,
-    ''
-  );
-
-  const intent = result.trim().toLowerCase();
-  return intent === 'question' ? 'question' : 'note';
-}
+// Plan bazlı arama konfigürasyonu
+const SEARCH_CONFIG: Record<UserRecord['plan'], { limit: number; hybrid: boolean }> = {
+  free:        { limit: 3,  hybrid: false },
+  kisisel:     { limit: 5,  hybrid: false },
+  profesyonel: { limit: 8,  hybrid: true  },
+  sinirsiz:    { limit: 10, hybrid: true  },
+};
 
 // ─── ANA YÖNLENDIRICI ────────────────────────────────────────────────────────
 
-/** Ana işlem yönlendirici — webhook'tan fire-and-forget olarak çağrılır */
 export async function processMessage(message: WhatsAppMessage, senderPhone: string) {
   const user = await getOrCreateUser(senderPhone);
 
@@ -152,7 +160,7 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
     }
 
     if (buttonId === 'delete_cancel') {
-      await sendMessage(senderPhone, '👍 İptal edildi, verilerın güvende.');
+      await sendMessage(senderPhone, '👍 İptal edildi, verilerin güvende.');
       return;
     }
 
@@ -160,9 +168,9 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
   }
 
   const text = message.text?.body?.trim() ?? '';
+  const textLower = text.toLowerCase();
 
   // ─── Veri indirme talebi (KVKK Md. 11) ─────────────────────────────────
-  const textLower = text.toLowerCase();
   if (textLower.includes('verilerimi indir')) {
     await exportUserData(user, senderPhone);
     return;
@@ -178,21 +186,23 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
     return;
   }
 
+  // ─── Görev komutları ─────────────────────────────────────────────────────
+  if (message.type === 'text') {
+    const handled = await handleSpecialCommand(textLower, user, senderPhone);
+    if (handled) return;
+  }
+
   // ─── KVKK onay kontrolü ─────────────────────────────────────────────────
   const accepted = await hasAcceptedKvkk(user.id);
   if (!accepted) {
-    // İlk kez geliyorsa karşılama mesajını da gönder
-    if (user.message_count === 0) {
-      await sendMessage(senderPhone, WELCOME_TEXT);
-    }
+    if (user.message_count === 0) await sendMessage(senderPhone, WELCOME_TEXT);
     await sendButtonMessage(senderPhone, KVKK_TEXT, [
       { id: 'kvkk_accept', title: '✅ Kabul Ediyorum' },
     ]);
     return;
   }
-  // ────────────────────────────────────────────────────────────────────────
 
-  // ─── Aylık mesaj limiti ──────────────────────────────────────────────────
+  // ─── Mesaj limiti ────────────────────────────────────────────────────────
   const msgUsage = await checkUsage(user.id, 'message');
   if (!msgUsage.allowed) {
     const limitText = user.plan === 'free'
@@ -205,55 +215,370 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
     return;
   }
 
-  // %80 eşiğini tam ilk geçişte bir kez uyar
   const threshold80 = Math.ceil(msgUsage.limit * 0.8);
   const sendQuotaWarning = msgUsage.count === threshold80;
-  // ────────────────────────────────────────────────────────────────────────
 
-  const type = await detectMessageType(message);
-  console.log(`[Processor] ${senderPhone} → ${type}`);
+  // ─── Sabah briefing / haftalık rapor (Özellik 4) ─────────────────────────
+  const briefingText = await tryGetBriefing(user, senderPhone);
+
+  // ─── Kullanıcı profili yükleme (Özellik 5) ──────────────────────────────
+  const { profile, memory_count_at_update } = await getUserProfile(senderPhone).catch(() => ({
+    profile: {} as Record<string, unknown>,
+    memory_count_at_update: 0,
+  }));
+  const profileStr = formatProfileForPrompt(profile);
+
+  // ─── Mesaj tipleri ───────────────────────────────────────────────────────
+  let msgType = detectQuickType(message);
 
   try {
-    if (type === 'link')          await processLink(message, user);
-    else if (type === 'audio')    await processAudio(message, user);
-    else if (type === 'image')    await processImage(message, user);
-    else if (type === 'question') await processQuestion(message, user);
-    else                          await processNote(message, user);
+    if (msgType === 'audio') {
+      await processAudio(message, user);
+    } else if (msgType === 'image') {
+      await processImage(message, user, profileStr);
+    } else if (msgType === 'link') {
+      await processLink(message, user, profileStr);
+    } else {
+      // Text mesajlar için birleşik analiz
+      const { tags: manualTags, cleanText } = extractHashtags(text);
+      const today = getTodayStr();
+      const analysis = await withRetry(
+        () => analyzeMessage(cleanText || text, today, profileStr),
+        2, 500
+      );
 
-    // Ana yanıttan sonra %80 kota uyarısı gönder (bir kez)
+      // Manuel hashtag'ler analiz tag'lerini override eder
+      if (manualTags.length > 0) {
+        const merged: string[] = [];
+        const seen: Record<string, boolean> = {};
+        for (const t of [...manualTags, ...analysis.tags]) {
+          if (!seen[t]) { seen[t] = true; merged.push(t); }
+        }
+        analysis.tags = merged;
+      }
+
+      if (analysis.is_task_completion && analysis.task_completion_hint) {
+        await handleTaskCompletion(analysis.task_completion_hint, user, senderPhone);
+        return;
+      }
+
+      if (analysis.intent === 'reminder') {
+        await processReminder(cleanText || text, analysis, user, senderPhone);
+      } else if (analysis.intent === 'query') {
+        await processQuestion(message, user, profileStr);
+      } else {
+        // task veya note — her ikisi de saveNote'a gider
+        await processNote(cleanText || text, analysis, user);
+      }
+    }
+
+    // Profil güncelleme (her 50 kayıtta bir, arka planda)
+    maybeUpdateProfile(user, senderPhone, memory_count_at_update).catch(() => {});
+
+    // %80 kota uyarısı
     if (sendQuotaWarning) {
       const remaining = msgUsage.limit - msgUsage.count;
       const periodText = user.plan === 'free' ? 'toplam' : 'bu ay';
-      await sendMessage(
+      sendMessage(
         senderPhone,
         `⚠️ *Kota Uyarısı:* ${periodText} kullanabileceğin mesaj hakkının %80'ini doldurdun.\n\n` +
         `Kalan: *${remaining} mesaj*\n\n` +
         `Limitini artırmak için: secondbrain.com.tr`
       ).catch(() => {});
     }
+
+    // Briefing varsa yanıttan sonra gönder
+    if (briefingText) {
+      sendMessage(senderPhone, briefingText).catch(() => {});
+    }
+
   } catch (err) {
-    console.error(`[Processor] Error (${type}):`, err);
+    console.error(`[Processor] Error:`, err);
     await sendMessage(senderPhone, '⚠️ Bir hata oluştu, lütfen tekrar dene.');
     const errMsg = err instanceof Error ? err.message : String(err);
-    await saveFailedMessage(senderPhone, type, message.text?.body ?? '', errMsg);
+    await saveFailedMessage(senderPhone, msgType, text, errMsg);
   }
 }
 
-// ─── LINK ───────────────────────────────────────────────────────────────────
-async function processLink(message: WhatsAppMessage, user: UserRecord) {
+// ─── ÖZEL KOMUTLAR ───────────────────────────────────────────────────────────
+
+async function handleSpecialCommand(
+  textLower: string,
+  user: UserRecord,
+  senderPhone: string
+): Promise<boolean> {
+  // Görev komutları
+  if (textLower === 'görevlerim' || textLower === 'yapılacaklar') {
+    const tasks = await getPendingTasks(user.id);
+    const overdue = await getOverdueTasks(user.id);
+    const overdueIds = new Set(overdue.map(t => t.id));
+    const pending = tasks.filter(t => !overdueIds.has(t.id));
+
+    let reply = '';
+    if (overdue.length > 0) {
+      reply += formatTaskList(overdue, '⚠️ Geciken Görevler') + '\n\n';
+    }
+    reply += formatTaskList(pending, '📋 Bekleyen Görevler');
+    await sendMessage(senderPhone, reply.slice(0, 4000));
+    return true;
+  }
+
+  if (textLower === 'bugün ne yapacağım' || textLower === 'bugünkü görevler') {
+    const tasks = await getTodayTasks(user.id);
+    const overdue = await getOverdueTasks(user.id);
+    let reply = '';
+    if (overdue.length > 0) reply += overdueWarningLine(overdue.length) + '\n';
+    reply += formatTaskList(tasks, `📅 Bugünkü Görevler`);
+    await sendMessage(senderPhone, reply.slice(0, 4000));
+    return true;
+  }
+
+  if (textLower === 'geciken görevler') {
+    const tasks = await getOverdueTasks(user.id);
+    await sendMessage(senderPhone, formatTaskList(tasks, '⚠️ Geciken Görevler').slice(0, 4000));
+    return true;
+  }
+
+  if (textLower === 'tamamlananlar') {
+    const tasks = await getRecentlyCompletedTasks(user.id, 7);
+    await sendMessage(senderPhone, formatTaskList(tasks, '✅ Son 7 Günde Tamamlananlar').slice(0, 4000));
+    return true;
+  }
+
+  if (textLower === 'görev raporu') {
+    const stats = await getWeeklyTaskStats(user.id);
+    const totalMems = await getTotalMemoryCount(user.id);
+    const report = buildReport({ ...stats, total_memories: totalMems });
+    await sendMessage(senderPhone, report);
+    return true;
+  }
+
+  // Hatırlatıcı komutları
+  if (textLower === 'hatırlatmalarım' || textLower === 'hatırlatıcılarım') {
+    const reminders = await getActiveReminders(senderPhone);
+    if (reminders.length === 0) {
+      await sendMessage(senderPhone, '⏰ Aktif hatırlatıcın yok.');
+    } else {
+      const lines = reminders.map((r, i) => {
+        const dt = new Date(r.remind_at).toLocaleString('tr-TR');
+        const rec = r.is_recurring ? ` (${r.recurrence_rule})` : '';
+        return `${i + 1}. ${r.message.slice(0, 80)}${rec} · 📅 ${dt}`;
+      });
+      await sendMessage(senderPhone, `⏰ *Aktif Hatırlatıcılar (${reminders.length}):*\n\n${lines.join('\n')}`);
+    }
+    return true;
+  }
+
+  // Profil
+  if (textLower === 'profilim') {
+    const { profile } = await getUserProfile(senderPhone);
+    if (Object.keys(profile).length === 0) {
+      await sendMessage(senderPhone, '👤 Henüz profil oluşturulmadı. Birkaç not kaydet, otomatik oluşturulacak.');
+    } else {
+      await sendMessage(senderPhone, `👤 *Profilin:*\n\n${JSON.stringify(profile, null, 2).slice(0, 3000)}`);
+    }
+    return true;
+  }
+
+  if (textLower === 'profilimi sil') {
+    await updateUserProfile(senderPhone, {}, 0);
+    await sendMessage(senderPhone, '🗑️ Profil silindi.');
+    return true;
+  }
+
+  return false;
+}
+
+// ─── GÖREV TAMAMLAMA ─────────────────────────────────────────────────────────
+
+async function handleTaskCompletion(
+  hint: string,
+  user: UserRecord,
+  senderPhone: string
+): Promise<void> {
+  const pending = await getPendingTasks(user.id);
+  if (pending.length === 0) {
+    // Tamamlama yorumu ama bekleyen görev yok — not olarak kaydet
+    await sendMessage(senderPhone, '✅ Kaydedildi!');
+    return;
+  }
+
+  const matchedId = await matchPendingTask(hint, pending.map(t => ({ id: t.id, content: t.content })));
+  if (matchedId) {
+    await updateTaskStatus(matchedId, 'done');
+    const task = pending.find(t => t.id === matchedId);
+    await sendMessage(senderPhone, `✅ *Tamamlandı:* ${task?.content.slice(0, 80) ?? ''} ✔️`);
+  } else {
+    await sendMessage(senderPhone, '✅ Harika! (Eşleştirilecek görev bulunamadı, not olarak kaydedilmedi.)');
+  }
+}
+
+// ─── SABAH BRİEFİNG ──────────────────────────────────────────────────────────
+
+async function tryGetBriefing(user: UserRecord, senderPhone: string): Promise<string | null> {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const state = await getUserState(senderPhone);
+
+    const needsBriefing = state.last_briefing_date !== today;
+    const isMonday = new Date().getDay() === 1;
+    const needsWeekly = isMonday && state.last_weekly_report !== today;
+
+    if (!needsBriefing && !needsWeekly) return null;
+
+    let text = '';
+
+    if (needsWeekly) {
+      const stats = await getWeeklyTaskStats(user.id);
+      const totalMems = await getTotalMemoryCount(user.id);
+      text += buildReport({ ...stats, total_memories: totalMems }) + '\n\n';
+      await updateUserState(senderPhone, { last_weekly_report: today });
+    }
+
+    if (needsBriefing) {
+      const [todayTasks, overdueTasks] = await Promise.all([
+        getTodayTasks(user.id),
+        getOverdueTasks(user.id),
+      ]);
+      const briefing = buildBriefing(todayTasks, overdueTasks);
+      if (briefing) text += briefing;
+      await updateUserState(senderPhone, { last_briefing_date: today });
+    }
+
+    return text.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── PROFİL GÜNCELLEME (arka plan) ───────────────────────────────────────────
+
+async function maybeUpdateProfile(
+  user: UserRecord,
+  senderPhone: string,
+  lastUpdateCount: number
+): Promise<void> {
+  const total = await getTotalMemoryCount(user.id);
+  if (total - lastUpdateCount < 50) return;
+
+  const contents = await getRecentMemoryContents(user.id, 50);
+  const { profile: existing } = await getUserProfile(senderPhone);
+  const newProfile = await generateUserProfile(contents, existing);
+  await updateUserProfile(senderPhone, newProfile, total);
+}
+
+// ─── HATIRLATICI İŞLEME ──────────────────────────────────────────────────────
+
+async function processReminder(
+  text: string,
+  analysis: Awaited<ReturnType<typeof analyzeMessage>>,
+  user: UserRecord,
+  senderPhone: string
+): Promise<void> {
+  if (!analysis.remind_at) {
+    // remind_at parse edilemedi — normal not olarak kaydet
+    await processNote(text, analysis, user);
+    return;
+  }
+
+  // Önce memory olarak kaydet
+  const embedding = await withRetry(() => embed(text), 3, 1000);
+  const memoryId = await saveMemory(user.id, text, embedding,
+    { type: 'reminder', saved_at: new Date().toISOString() },
+    {
+      is_task: true,
+      due_date: analysis.remind_at,
+      tags: analysis.tags,
+    }
+  );
+
+  // Reminder tablosuna kaydet
+  await createReminder(
+    senderPhone,
+    text,
+    analysis.remind_at,
+    memoryId,
+    analysis.recurrence_rule != null,
+    analysis.recurrence_rule
+  );
+
+  const dt = new Date(analysis.remind_at).toLocaleString('tr-TR');
+  const recStr = analysis.recurrence_rule ? ` (tekrarlı: ${analysis.recurrence_rule})` : '';
+  await sendMessage(
+    senderPhone,
+    `⏰ *Hatırlatıcı ayarlandı!*\n\n📅 ${dt}${recStr}\n📝 ${text.slice(0, 150)}`
+  );
+}
+
+// ─── NOT KAYDETME ─────────────────────────────────────────────────────────────
+
+async function processNote(
+  text: string,
+  analysis: Awaited<ReturnType<typeof analyzeMessage>>,
+  user: UserRecord
+): Promise<void> {
+  const embedding = await withRetry(() => embed(text), 3, 1000);
+  const memoryId = await saveMemory(
+    user.id,
+    text,
+    embedding,
+    { type: 'note', saved_at: new Date().toISOString() },
+    {
+      is_task: analysis.intent === 'task',
+      task_status: analysis.intent === 'task' ? 'pending' : undefined,
+      due_date: analysis.due_date,
+      time_expression: analysis.time_expression ?? undefined,
+      tags: analysis.tags,
+    }
+  );
+
+  // Akıllı bağlantı kontrolü (Özellik 9)
+  findSimilarMemories(user.id, embedding, memoryId, 0.85, 3)
+    .then(similar => {
+      similar.forEach(s => saveMemoryConnection(memoryId, s.id, s.similarity).catch(() => {}));
+      if (similar.length > 0) {
+        sendMessage(
+          user.whatsapp_id,
+          `🔗 Bu notla ilişkili *${similar.length}* eski kaydın var. "ilişkili notlar" yazarak görebilirsin.`
+        ).catch(() => {});
+      }
+    })
+    .catch(() => {});
+
+  if (analysis.intent === 'task') {
+    const dueStr = analysis.due_date
+      ? ` 📅 ${new Date(analysis.due_date).toLocaleDateString('tr-TR')}`
+      : '';
+    const tagStr = analysis.tags.length > 0 ? ` [${analysis.tags.join(', ')}]` : '';
+    await sendMessage(user.whatsapp_id, `✅ *Görev kaydedildi:* ${text.slice(0, 100)}${dueStr}${tagStr}`);
+  } else {
+    const tagStr = analysis.tags.length > 0 ? ` 🏷️ ${analysis.tags.join(', ')}` : '';
+    await sendMessage(user.whatsapp_id, `✅ Not kaydedildi!${tagStr}`);
+  }
+}
+
+// ─── LINK ─────────────────────────────────────────────────────────────────────
+
+async function processLink(
+  message: WhatsAppMessage,
+  user: UserRecord,
+  _profileStr: string
+): Promise<void> {
   const urlUsage = await checkUsage(user.id, 'url');
   if (!urlUsage.allowed) {
     await sendMessage(
       user.whatsapp_id,
-      `🔗 Bu ay kaydedebileceğin ${urlUsage.limit} link hakkını doldurdun.\n\nDaha fazla link kaydetmek için planını yükselt: secondbrain.com.tr`
+      `🔗 Bu ay kaydedebileceğin ${urlUsage.limit} link hakkını doldurdun.\n\nDaha fazla link için planını yükselt: secondbrain.com.tr`
     );
     return;
   }
 
   const text: string = message.text!.body;
   const url = text.match(/https?:\/\/[^\s]+/i)![0];
+  const { tags: manualTags, cleanText: userContext } = extractHashtags(
+    text.replace(/https?:\/\/[^\s]+/gi, '').trim()
+  );
 
-  const userContext = text.replace(/https?:\/\/[^\s]+/gi, '').trim();
   const isLocationLink = /maps\.google|goo\.gl\/maps|maps\.app\.goo|yandex.*maps|waze\.com/i.test(url);
   const isSocialMedia = /instagram\.com|tiktok\.com/i.test(url);
 
@@ -266,26 +591,22 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
       userContext ? `Kullanıcı notu: ${userContext}` : '',
     ].filter(Boolean).join('\n');
 
-    const hasContent = socialMeta?.title || socialMeta?.author || userContext;
-    if (!hasContent) {
-      await sendMessage(user.whatsapp_id, '💡 Instagram içerikleri otomatik okunamıyor. Linke kısa bir açıklama ekleyerek tekrar gönder — örn:\n"[link] et yemeği tarifi"\n"[link] bu ürünü al"');
+    if (!socialMeta?.title && !socialMeta?.author && !userContext) {
+      await sendMessage(user.whatsapp_id, '💡 Instagram içerikleri otomatik okunamıyor. Linke kısa bir açıklama ekleyerek tekrar gönder.');
       return;
     }
 
-    const enriched = await withRetry(
-      () => chat(
-        `Kullanıcı bir sosyal medya içeriği paylaştı. Aşağıdaki bilgileri analiz et ve hafızaya kaydedilecek zengin bir metin oluştur.
-İçeriğin ne hakkında olduğunu, kategorisini ve anahtar kelimeleri çıkar. Türkçe yaz, 3-5 cümle.`,
-        `Link: ${url}\n${contextParts}`
-      ),
-      3, 1000
-    );
+    const enriched = await withRetry(() => chat(
+      'Kullanıcı bir sosyal medya içeriği paylaştı. Hafızaya kaydedilecek zengin metin oluştur. Türkçe, 3-5 cümle.',
+      `Link: ${url}\n${contextParts}`
+    ), 3, 1000);
 
     const contentToSave = `URL: ${url}\n${contextParts}\nİçerik analizi: ${enriched}`;
     const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
-    await saveMemory(user.id, contentToSave, embedding, {
-      type: 'link', url, platform: socialMeta?.platform, saved_at: new Date().toISOString(),
-    });
+    await saveMemory(user.id, contentToSave, embedding,
+      { type: 'link', url, platform: socialMeta?.platform, saved_at: new Date().toISOString() },
+      { tags: manualTags }
+    );
     await sendMessage(user.whatsapp_id, `✅ Kaydedildi!\n\n🧠 *Analiz:*\n${enriched}`);
     return;
   }
@@ -306,9 +627,10 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
       if (msg.includes('403') || msg.includes('do not support this site')) {
         if (userContext) {
           const embedding = await withRetry(() => embed(`URL: ${url}\n${userContext}`), 3, 1000);
-          await saveMemory(user.id, `URL: ${url}\nKullanıcı notu: ${userContext}`, embedding, {
-            type: 'link', url, saved_at: new Date().toISOString(),
-          });
+          await saveMemory(user.id, `URL: ${url}\nKullanıcı notu: ${userContext}`, embedding,
+            { type: 'link', url, saved_at: new Date().toISOString() },
+            { tags: manualTags }
+          );
           await sendMessage(user.whatsapp_id, '✅ Notun kaydedildi!');
         } else {
           await sendMessage(user.whatsapp_id, '❌ Bu site okunamıyor. Linke kısa bir açıklama ekleyerek tekrar gönder.');
@@ -318,13 +640,10 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
       throw err;
     }
     truncated = markdown.slice(0, 6000);
-    summary = await withRetry(
-      () => chat(
-        'Sen bir içerik özetleyicisisin. Verilen makaleyi Türkçe olarak 3-5 cümleyle özetle. Başlık ve ana fikirler dahil olsun.',
-        truncated
-      ),
-      3, 1000
-    );
+    summary = await withRetry(() => chat(
+      'Sen bir içerik özetleyicisisin. Verilen makaleyi Türkçe olarak 3-5 cümleyle özetle. Başlık ve ana fikirler dahil olsun.',
+      truncated
+    ), 3, 1000);
   }
 
   const contentToSave = [
@@ -334,15 +653,20 @@ async function processLink(message: WhatsAppMessage, user: UserRecord) {
     truncated ? `Tam içerik:\n${truncated}` : '',
   ].filter(Boolean).join('\n');
   const embedding = await withRetry(() => embed(contentToSave), 3, 1000);
-  await saveMemory(user.id, contentToSave, embedding, {
-    type: 'link', url, saved_at: new Date().toISOString(),
-  });
-
+  await saveMemory(user.id, contentToSave, embedding,
+    { type: 'link', url, saved_at: new Date().toISOString() },
+    { tags: manualTags }
+  );
   await sendMessage(user.whatsapp_id, `✅ Link kaydedildi!\n\n📄 *Özet:*\n${summary}`);
 }
 
-// ─── IMAGE ──────────────────────────────────────────────────────────────────
-async function processImage(message: WhatsAppMessage, user: UserRecord) {
+// ─── IMAGE ────────────────────────────────────────────────────────────────────
+
+async function processImage(
+  message: WhatsAppMessage,
+  user: UserRecord,
+  _profileStr: string
+): Promise<void> {
   await sendMessage(user.whatsapp_id, '🖼️ Görsel analiz ediliyor...');
 
   const imageId = (message.image as { id: string } | undefined)?.id;
@@ -369,10 +693,11 @@ async function processImage(message: WhatsAppMessage, user: UserRecord) {
   await sendMessage(user.whatsapp_id, `✅ Görsel kaydedildi!\n\n🧠 *Analiz:*\n${analysis}`);
 }
 
-// ─── AUDIO ──────────────────────────────────────────────────────────────────
-const MAX_AUDIO_BYTES = 10 * 1024 * 1024; // 10 MB
+// ─── AUDIO (Özellik 7: Sesli Özet) ───────────────────────────────────────────
 
-async function processAudio(message: WhatsAppMessage, user: UserRecord) {
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+
+async function processAudio(message: WhatsAppMessage, user: UserRecord): Promise<void> {
   const audioUsage = await checkUsage(user.id, 'audio');
   if (!audioUsage.allowed) {
     await sendMessage(
@@ -383,36 +708,42 @@ async function processAudio(message: WhatsAppMessage, user: UserRecord) {
   }
   await sendMessage(user.whatsapp_id, '🎤 Ses mesajı işleniyor...');
 
-  const { buffer, mimeType, fileSize } = await withRetry(() => downloadMedia((message.audio as { id: string }).id), 3, 1000);
+  const { buffer, mimeType, fileSize } = await withRetry(
+    () => downloadMedia((message.audio as { id: string }).id), 3, 1000
+  );
 
   if (fileSize > MAX_AUDIO_BYTES) {
-    await sendMessage(user.whatsapp_id, `❌ Ses dosyası çok büyük (${(fileSize / 1024 / 1024).toFixed(1)} MB). Maksimum boyut 10 MB.`);
+    await sendMessage(user.whatsapp_id, `❌ Ses dosyası çok büyük (${(fileSize / 1024 / 1024).toFixed(1)} MB). Maksimum 10 MB.`);
     return;
   }
 
   const transcript = await withRetry(() => transcribeAudio(buffer, mimeType), 3, 1000);
 
-  const embedding = await withRetry(() => embed(transcript), 3, 1000);
-  await saveMemory(user.id, transcript, embedding, {
-    type: 'audio', saved_at: new Date().toISOString(),
-  });
+  // Özellik 7: Özet embedding için kullan, raw transcript metadata'da sakla
+  const summary = await withRetry(() => summarizeTranscript(transcript), 2, 500)
+    .catch(() => transcript.slice(0, 300));
+
+  const embedding = await withRetry(() => embed(summary), 3, 1000);
+  await saveMemory(
+    user.id,
+    summary,  // arama için özet
+    embedding,
+    { type: 'audio', raw_transcript: transcript.slice(0, 3000), saved_at: new Date().toISOString() }
+  );
 
   await sendMessage(
     user.whatsapp_id,
-    `✅ Ses notu kaydedildi!\n\n📝 *Transkript:*\n${transcript}`
+    `✅ Ses notu kaydedildi!\n\n📝 *Transkript:*\n${transcript.slice(0, 600)}${transcript.length > 600 ? '…' : ''}`
   );
 }
 
-// Plan bazlı arama konfigürasyonu
-const SEARCH_CONFIG: Record<UserRecord['plan'], { limit: number; hybrid: boolean }> = {
-  free:         { limit: 3,  hybrid: false },
-  kisisel:      { limit: 5,  hybrid: false },
-  profesyonel:  { limit: 8,  hybrid: true  },
-  sinirsiz:     { limit: 10, hybrid: true  },
-};
+// ─── QUESTION ─────────────────────────────────────────────────────────────────
 
-// ─── QUESTION ───────────────────────────────────────────────────────────────
-async function processQuestion(message: WhatsAppMessage, user: UserRecord) {
+async function processQuestion(
+  message: WhatsAppMessage,
+  user: UserRecord,
+  profileStr: string
+): Promise<void> {
   const query: string = message.text!.body;
   const queryEmbedding = await withRetry(() => embed(query), 3, 1000);
 
@@ -431,37 +762,34 @@ async function processQuestion(message: WhatsAppMessage, user: UserRecord) {
     .join('\n\n---\n\n');
 
   const urls = memories
-    .map(m => {
-      const match = m.content.match(/URL:\s*(https?:\/\/[^\s\n]+)/);
-      return match ? match[1] : null;
-    })
+    .map(m => { const match = m.content.match(/URL:\s*(https?:\/\/[^\s\n]+)/); return match ? match[1] : null; })
     .filter(Boolean);
 
-  const systemPrompt = `Sen "Second Brain" adında kişisel bir AI asistanısın. \
-Kullanıcının daha önce kaydettiği notlar, linkler ve ses mesajları aşağıda verilmiştir. \
-Bu bağlamı kullanarak soruyu Türkçe, kısa ve net şekilde yanıtla. \
-Kayıtta URL varsa cevabın sonunda mutlaka göster. \
-Cevap bağlamda yoksa bunu açıkça belirt.
-
-KAYITLI HAFIZA:
-${context}`;
+  const today = getTodayStr();
+  const profileCtx = profileStr ? `\nKullanıcı: ${profileStr}` : '';
+  const systemPrompt =
+    `Sen "Second Brain" kişisel AI asistanısın. Bugün: ${today}.${profileCtx}\n` +
+    `Kullanıcının kayıtları aşağıda. Soruyu Türkçe, kısa ve net yanıtla. ` +
+    `URL varsa cevabın sonunda göster. Cevap kayıtlarda yoksa açıkça belirt.\n\n` +
+    `KAYITLI HAFIZA:\n${context}`;
 
   const answer = await withRetry(() => chat(systemPrompt, query), 3, 1000);
-  const urlSuffix = urls.length > 0 ? `\n\n🔗 *Link:*\n${urls.join('\n')}` : '';
+  const urlSuffix = urls.length > 0 ? `\n\n🔗 *Link:*\n${(urls as string[]).join('\n')}` : '';
   await sendMessage(user.whatsapp_id, `🧠 *Second Brain:*\n\n${answer}${urlSuffix}`);
 }
 
-// ─── NOTE ───────────────────────────────────────────────────────────────────
-async function processNote(message: WhatsAppMessage, user: UserRecord) {
-  const text: string = message.text!.body;
-  const embedding = await withRetry(() => embed(text), 3, 1000);
-  await saveMemory(user.id, text, embedding, {
-    type: 'note', saved_at: new Date().toISOString(),
-  });
-  await sendMessage(user.whatsapp_id, '✅ Not kaydedildi!');
+// ─── QUICK TYPE DETECTION (API call olmadan) ──────────────────────────────────
+
+function detectQuickType(message: WhatsAppMessage): 'audio' | 'image' | 'link' | 'text' {
+  if (message.type === 'audio') return 'audio';
+  if (message.type === 'image') return 'image';
+  const text = message.text?.body ?? '';
+  if (/https?:\/\/[^\s]+/i.test(text)) return 'link';
+  return 'text';
 }
 
-// ─── VERİ İNDİRME (KVKK Md. 11) ────────────────────────────────────────────
+// ─── VERİ İNDİRME (KVKK Md. 11) ─────────────────────────────────────────────
+
 const EXPORT_PREVIEW_LIMIT = 15;
 
 async function exportUserData(user: UserRecord, senderPhone: string) {
@@ -472,16 +800,13 @@ async function exportUserData(user: UserRecord, senderPhone: string) {
     return;
   }
 
-  // Tip bazlı sayım
   const counts = memories.reduce<Record<string, number>>((acc, m) => {
     const t = (m.metadata?.type as string) ?? 'other';
     acc[t] = (acc[t] ?? 0) + 1;
     return acc;
   }, {});
 
-  const countLines = Object.entries(counts)
-    .map(([t, n]) => `  • ${t}: ${n}`)
-    .join('\n');
+  const countLines = Object.entries(counts).map(([t, n]) => `  • ${t}: ${n}`).join('\n');
 
   const header =
     `📦 *Second Brain — Veri Dışa Aktarımı*\n\n` +
@@ -495,7 +820,6 @@ async function exportUserData(user: UserRecord, senderPhone: string) {
 
   await sendMessage(senderPhone, header);
 
-  // Her kaydı ayrı mesaj olarak gönder (4096 char sınırı)
   const preview = memories.slice(0, EXPORT_PREVIEW_LIMIT);
   for (let i = 0; i < preview.length; i++) {
     const mem = preview[i];
