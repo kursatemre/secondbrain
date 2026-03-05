@@ -14,7 +14,7 @@ export interface AnalysisResult {
   task_completion_hint: string | null; // hangi görevi tamamlıyor
   remind_at: string | null;         // hatırlatma zamanı ISO 8601
   recurrence_rule: string | null;   // "weekly:monday", "daily", "monthly:15"
-}
+  reminder_text: string | null;     // kısa, temiz hatırlatma metni ("Su iç! 💧")
 
 const AUTO_TAG_POOL = [
   'iş', 'kişisel', 'finans', 'sağlık', 'eğitim',
@@ -70,7 +70,8 @@ export async function analyzeMessage(
     `  "is_task_completion": true|false,\n` +
     `  "task_completion_hint": "tamamlanan görev açıklaması"|null,\n` +
     `  "remind_at": "ISO8601"|null,\n` +
-    `  "recurrence_rule": "weekly:monday"|"daily"|"monthly:15"|null\n` +
+    `  "recurrence_rule": "weekly:monday"|"daily"|"monthly:15"|null,\n` +
+    `  "reminder_text": "kısa eylem cümlesi"|null\n` +
     `}\n\n` +
     `Kurallar:\n` +
     `- intent=task: yapılacak bir iş/eylem/görev içeriyor\n` +
@@ -81,7 +82,8 @@ export async function analyzeMessage(
     `- is_task_completion: "bitti","aldım","yaptım","tamam","tamamladım","gittim" vb. içeriyorsa true\n` +
     `- tags: 1-3 etiket, havuzdan seç. Kullanıcı belirtmişse onu kullan.\n` +
     `- due_date: zaman ifadesi varsa ISO 8601 döndür (bugün saati varsa ekle, yoksa T09:00:00Z kullan)\n` +
-    `- remind_at: sadece intent=reminder için, yoksa null`;
+    `- remind_at: sadece intent=reminder için, yoksa null\n` +
+    `- reminder_text: sadece intent=reminder için, kullanıcının ne yapması gerektiğini kısa eylem cümlesi olarak yaz (örn: "Su iç! 💧", "Faturayı öde 💳", "Haftalık raporu hazırla 📊") — kullanıcının mesajını olduğu gibi kopyalama`;
 
   try {
     const raw = await chat(systemPrompt, userPrompt);
@@ -96,6 +98,7 @@ export async function analyzeMessage(
       task_completion_hint: parsed.task_completion_hint ?? null,
       remind_at:            parsed.remind_at            ?? null,
       recurrence_rule:      parsed.recurrence_rule      ?? null,
+      reminder_text:        parsed.reminder_text        ?? null,
     };
   } catch {
     // JSON parse hatasında güvenli varsayılan
@@ -108,6 +111,7 @@ export async function analyzeMessage(
       task_completion_hint: null,
       remind_at: null,
       recurrence_rule: null,
+      reminder_text: null,
     };
   }
 }

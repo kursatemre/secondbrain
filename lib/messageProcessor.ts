@@ -552,10 +552,13 @@ async function processReminder(
     }
   );
 
+  // Kısa temiz hatırlatma metni (GPT ürettiyse onu kullan, yoksa ham metin)
+  const reminderMsg = analysis.reminder_text || text;
+
   // Reminder tablosuna kaydet
   await createReminder(
     senderPhone,
-    text,
+    reminderMsg,
     analysis.remind_at,
     memoryId,
     analysis.recurrence_rule != null,
@@ -566,7 +569,7 @@ async function processReminder(
   const recStr = analysis.recurrence_rule ? ` (tekrarlı: ${analysis.recurrence_rule})` : '';
   await sendMessage(
     senderPhone,
-    `⏰ *Hatırlatıcı ayarlandı!*\n\n📅 ${dt}${recStr}\n📝 ${text.slice(0, 150)}`
+    `⏰ *Hatırlatıcı ayarlandı!*\n\n📅 ${dt}${recStr}\n📝 ${reminderMsg}`
   );
 }
 
