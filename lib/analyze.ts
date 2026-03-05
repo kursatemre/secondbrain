@@ -25,7 +25,10 @@ const DAYS_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma
 
 export function getTodayStr(): string {
   const now = new Date();
-  return `${now.toISOString().split('T')[0]}, ${DAYS_TR[now.getDay()]}`;
+  const date = now.toISOString().split('T')[0];
+  const time = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
+  const day = DAYS_TR[now.getDay()];
+  return `${date}, ${day}, saat ${time} (Türkiye saati, UTC+3)`;
 }
 
 /** Metinden #hashtag etiketlerini çıkarır ve temizlenmiş metni döner */
