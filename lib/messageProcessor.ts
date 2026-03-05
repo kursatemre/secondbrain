@@ -63,17 +63,43 @@ const WELCOME_TEXT = `👋 *Second Brain'e Hoş Geldin!*
 
 Ben senin kişisel AI hafızan. WhatsApp üzerinden her şeyi kaydeder, istediğinde bulup getiririm.
 
-*Ne yapabilirsin?*
-
-📝 *Not* — "Yarın saat 15 toplantı var"
-🔗 *Link* — URL at, özetleyip saklarım
-🎤 *Ses notu* — Sesli mesaj gönder, yazıya çevirip kaydederim
-🖼️ *Görsel* — Fotoğraf at, analiz edip saklarım
-
-*Sonra istediğini sor:*
-"O toplantı ne zamandı?" · "Pasta tarifini bul" · "Bugün ne yapacağım?"
-
 Devam etmek için önce gizlilik onayı gerekiyor 👇`;
+
+const USAGE_GUIDE = `📖 *Second Brain — Kullanım Kılavuzu*
+
+*📥 Kaydetmek için:*
+📝 Herhangi bir metin yaz → kaydederim
+🔗 Link gönder → özetleyip saklarım
+🎤 Ses notu gönder → yazıya çevirip kaydederim
+🖼️ Fotoğraf gönder → analiz edip saklarım
+🏷️ Etiket ekle → "süt al #alışveriş #kişisel"
+
+*🔍 Soru sormak için:*
+"Pasta tarifini bul"
+"O toplantı ne zamandı?"
+"Hangi linki atmıştım?"
+
+*✅ Görev yönetimi:*
+"Yarın saat 15 toplantı var" → görev kaydedilir
+"süt aldım" / "toplantı bitti" → tamamlandı
+"görevlerim" → bekleyen görevler listesi
+"bugün ne yapacağım" → bugünkü görevler
+"geciken görevler" → vadesi geçmiş görevler
+"tamamlananlar" → son 7 günde bitenler
+
+*⏰ Hatırlatıcı:*
+"3 gün sonra hatırlat: faturayı öde"
+"Her Pazartesi hatırlat: haftalık rapor"
+"15 Mart saat 14:00'te hatırlat"
+"hatırlatmalarım" → aktif hatırlatıcılar
+
+*📊 Raporlar:*
+"görev raporu" → haftalık istatistik
+
+*🔐 Veri haklarım:*
+"verilerimi indir" → kayıtlarını görüntüle (KVKK)
+"verilerimi sil" → tüm verilerini sil
+"profilim" → Second Brain'in seni nasıl tanıdığı`;
 
 const KVKK_TEXT = `🔒 *Gizlilik ve Veri Koruma Bildirimi*
 
@@ -122,7 +148,18 @@ type UserRecord = {
   whatsapp_id: string;
   plan: 'free' | 'kisisel' | 'profesyonel' | 'sinirsiz';
   message_count: number;
+  trial_ends_at: string | null;
 };
+
+/** Trial aktifse true döner */
+function isTrialActive(user: UserRecord): boolean {
+  return !!user.trial_ends_at && new Date(user.trial_ends_at) > new Date();
+}
+
+/** Trial veya gerçek plana göre efektif planı döner */
+function effectivePlan(user: UserRecord): UserRecord['plan'] {
+  return isTrialActive(user) ? 'profesyonel' : user.plan;
+}
 
 // Plan bazlı arama konfigürasyonu
 const SEARCH_CONFIG: Record<UserRecord['plan'], { limit: number; hybrid: boolean }> = {
@@ -143,10 +180,29 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
 
     if (buttonId === 'kvkk_accept') {
       await recordKvkkConsent(user.id);
-      await sendMessage(
-        senderPhone,
-        '✅ *Onayın alındı!*\n\nArtık Second Brain\'ini kullanabilirsin.\n\nBir not, link, ses mesajı veya görsel gönder — hepsini kaydeder, istediğinde bulup getiririm 🧠'
-      );
+
+      // 1. Kullanım kılavuzu
+      await sendMessage(senderPhone, USAGE_GUIDE);
+
+      // 2. Trial bilgilendirme
+      const trialEnd = user.trial_ends_at
+        ? new Date(user.trial_ends_at).toLocaleDateString('tr-TR')
+        : null;
+      const trialMsg = trialEnd
+        ? `🎁 *15 Günlük Ücretsiz Deneme Başladı!*\n\n` +
+          `Deneme süresince tüm *Profesyonel Plan* özellikleri açık:\n` +
+          `✅ Sınırsız mesaj\n` +
+          `✅ Ses notu (sınırsız)\n` +
+          `✅ Görsel analiz\n` +
+          `✅ Hibrit arama\n` +
+          `✅ Hatırlatıcılar\n` +
+          `✅ Sabah briefing\n\n` +
+          `⏳ Deneme: *${trialEnd}* tarihine kadar geçerli.\n` +
+          `Sonrasında ücretsiz plan (30 mesaj/toplam) devam eder.\n\n` +
+          `Plan yükseltmek için: secondbrain.com.tr`
+        : `✅ *Onayın alındı!* Artık Second Brain\'ini kullanabilirsin. 🧠`;
+
+      await sendMessage(senderPhone, trialMsg);
       return;
     }
 
@@ -202,9 +258,10 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
     return;
   }
 
-  // ─── Mesaj limiti ────────────────────────────────────────────────────────
+  // ─── Mesaj limiti (trial aktifse bypass) ────────────────────────────────
+  const trialActive = isTrialActive(user);
   const msgUsage = await checkUsage(user.id, 'message');
-  if (!msgUsage.allowed) {
+  if (!msgUsage.allowed && !trialActive) {
     const limitText = user.plan === 'free'
       ? `Ücretsiz planda toplam ${msgUsage.limit} mesaj hakkın var ve hepsini kullandın.`
       : `Bu ay kullanabileceğin ${msgUsage.limit} mesaj hakkını doldurdun.`;
@@ -216,7 +273,8 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
   }
 
   const threshold80 = Math.ceil(msgUsage.limit * 0.8);
-  const sendQuotaWarning = msgUsage.count === threshold80;
+  const sendQuotaWarning = !trialActive && msgUsage.count === threshold80;
+  const userPlan = effectivePlan(user);
 
   // ─── Sabah briefing / haftalık rapor (Özellik 4) ─────────────────────────
   const briefingText = await tryGetBriefing(user, senderPhone);
@@ -265,7 +323,7 @@ export async function processMessage(message: WhatsAppMessage, senderPhone: stri
       if (analysis.intent === 'reminder') {
         await processReminder(cleanText || text, analysis, user, senderPhone);
       } else if (analysis.intent === 'query') {
-        await processQuestion(message, user, profileStr);
+        await processQuestion(message, user, profileStr, userPlan);
       } else {
         // task veya note — her ikisi de saveNote'a gider
         await processNote(cleanText || text, analysis, user);
@@ -742,12 +800,13 @@ async function processAudio(message: WhatsAppMessage, user: UserRecord): Promise
 async function processQuestion(
   message: WhatsAppMessage,
   user: UserRecord,
-  profileStr: string
+  profileStr: string,
+  plan: UserRecord['plan'] = 'free'
 ): Promise<void> {
   const query: string = message.text!.body;
   const queryEmbedding = await withRetry(() => embed(query), 3, 1000);
 
-  const { limit, hybrid } = SEARCH_CONFIG[user.plan] ?? SEARCH_CONFIG.free;
+  const { limit, hybrid } = SEARCH_CONFIG[plan] ?? SEARCH_CONFIG.free;
   const memories = hybrid
     ? await searchMemoriesHybrid(user.id, queryEmbedding, query, limit)
     : await searchMemories(user.id, queryEmbedding, limit);

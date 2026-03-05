@@ -18,6 +18,7 @@ export interface User {
   plan: 'free' | 'kisisel' | 'profesyonel' | 'sinirsiz';
   message_count: number;
   kvkk_accepted_at: string | null;
+  trial_ends_at: string | null;
 }
 
 export interface Memory {
@@ -37,9 +38,12 @@ export async function getOrCreateUser(whatsappId: string): Promise<User> {
 
   if (existing) return existing as User;
 
+  // Yeni kullanıcı: 15 günlük trial başlat
+  const trialEndsAt = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
   const { data, error } = await getSupabase()
     .from('users')
-    .insert({ whatsapp_id: whatsappId })
+    .insert({ whatsapp_id: whatsappId, trial_ends_at: trialEndsAt })
     .select()
     .single();
 
